@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attachment;
+use App\Support\StoragePath;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -35,7 +36,12 @@ class AttachmentDownloadController extends Controller
         // si alguna vez pasara a armarse con entrada del usuario, un `..` acá
         // serviría `/etc/passwd`. Se compara ya normalizado, porque `realpath`
         // resuelve los `..` y los symlinks del camino.
-        $root = realpath(storage_path('app/attachments'));
+        //
+        // La raíz sale de `StoragePath::attachments()` y NO de
+        // `storage_path('app/attachments')`: en Docker los adjuntos viven en un
+        // volumen montado en `/var/www/gmail-docs/attachments`, así que la ruta
+        // fija no existe y TODO download daba 404.
+        $root = realpath(StoragePath::attachments());
         $real = realpath($path);
 
         if ($root === false || $real === false || ! str_starts_with($real, $root.DIRECTORY_SEPARATOR)) {

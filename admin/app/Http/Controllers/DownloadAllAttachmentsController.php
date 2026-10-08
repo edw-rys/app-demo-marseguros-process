@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProcessedEmail;
+use App\Support\StoragePath;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
@@ -26,7 +27,10 @@ class DownloadAllAttachmentsController extends Controller
         $attachments = $email->attachments()->get();
 
         $availableFiles = [];
-        $root = realpath(storage_path('app/attachments'));
+
+        // La raíz sale de `StoragePath`, no de una ruta fija: en Docker los
+        // adjuntos cuelgan de un volumen en `/var/www/gmail-docs/attachments`.
+        $root = realpath(StoragePath::attachments());
 
         foreach ($attachments as $att) {
             if (! $att->fileExists()) {
