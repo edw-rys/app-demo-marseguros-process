@@ -26,12 +26,22 @@ class JobInfolist
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            ->columns(1)
             ->components([
-                Section::make('Correo')->columns(4)->schema([
-                    TextEntry::make('subject')->label('Asunto')->columnSpan(2),
+                Section::make('Correo')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'sm'      => 2,
+                        'lg'      => 4,
+                    ])->schema([
+                    TextEntry::make('subject')->label('Asunto')
+                        ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 2]),
                     TextEntry::make('sender')->label('Remitente')
-                        ->placeholder('—'),
-                    TextEntry::make('mailbox')->label('Buzón'),
+                        ->placeholder('—')
+                        ->extraAttributes(['class' => 'break-normal']),
+                    TextEntry::make('mailbox')->label('Buzón')
+                        ->extraAttributes(['class' => 'break-normal']),
 
                     TextEntry::make('status')->label('Estado')
                         ->badge()
@@ -46,34 +56,71 @@ class JobInfolist
                         ->state(fn (?ProcessedEmail $record): string => self::formatMs($record?->totalDurationMs())),
                 ]),
 
-                Section::make('Etapas del análisis')->description(
-                    'Cada fila es una ejecución real. Reprocesar agrega una corrida nueva sin borrar esta.'
-                )->schema([
+                Section::make('Etapas del análisis')
+                    ->columnSpanFull()
+                    ->description(
+                        'Cada nodo es una etapa del pipeline. Clic en un nodo para ver qué hace y descargar el archivo.'
+                    )->schema([
                     TextEntry::make('timeline')
                         ->hiddenLabel()
+                        ->columnSpanFull()
                         ->html()
-                        ->state(fn (ProcessedEmail $record): string => view('filament.jobs.timeline', [
-                            'runs' => self::runsOf($record),
-                        ])->render()),
+                        ->state(fn (ProcessedEmail $record): string => self::timelineHtml($record)),
 
-                    // Capa en vivo por SSE. Va DEBAJO del estático a propósito:
-                    // si el JS no corre, lo de arriba sigue mostrando el
-                    // historial completo y la página no se ve rota.
                     TextEntry::make('live')
                         ->hiddenLabel()
+                        ->columnSpanFull()
                         ->html()
+                        ->visible(fn (ProcessedEmail $record): bool => ! $record->isFinished())
                         ->state(fn (ProcessedEmail $record): string => view('filament.jobs.timeline-live', [
                             'record' => $record,
                         ])->render()),
                 ]),
 
-                self::attachmentsSection(),
-                self::validationSection(),
-                self::responseSection(),
+                self::attachmentsSection()->columnSpanFull(),
+                self::validationSection()->columnSpanFull(),
+                self::responseSection()->columnSpanFull(),
             ]);
     }
 
     // ── Timeline ─────────────────────────────────────────────────────────────
+
+    /**
+     * HTML del grafo de etapas.
+     *
+     * La vista se renderiza UNA VEZ POR CORRIDA en vez de recibir todas juntas:
+     * cada corrida es un grafo completo e independiente, y el `use` de PHP que
+     * importa `PipelineStage` tiene que quedar en el nivel superior del archivo
+     * de la vista — dentro de un `@if` sería un error de parseo.
+     *
+     * Con `$run = null` la vista dibuja el estado vacío, para no duplicar el
+     * "todavía no hay etapas" en PHP y en Blade.
+     */
+    private static function timelineHtml(ProcessedEmail $email): string
+    {
+        $runs = self::runsOf($email);
+
+        if ($runs === []) {
+            return view('filament.jobs.timeline', [
+                'runs' => [],
+                'run'  => null,
+                'index' => 0,
+            ])->render();
+        }
+
+        $blocks = [];
+
+        foreach ($runs as $index => $run) {
+            $blocks[] = view('filament.jobs.timeline', [
+                'email' => $email,
+                'runs'  => $runs,
+                'run'   => $run,
+                'index' => $index,
+            ])->render();
+        }
+
+        return '<div class="space-y-4">'.implode('', $blocks).'</div>';
+    }
 
     /**
      * Agrupa las etapas por corrida del pipeline.
@@ -122,49 +169,16 @@ class JobInfolist
     private static function attachmentsSection(): Section
     {
         return Section::make('Adjuntos')
-            ->description('Lo que se detectó, clasificó y extrajo de cada archivo.')
-            ->collapsible()
-            ->collapsed()
+            ->description('Archivos detectados, clasificados y extraídos. Clic en cualquier archivo para ver su detalle completo.')
             ->schema([
-                RepeatableEntry::make('attachments')
+                TextEntry::make('attachments_gallery')
                     ->hiddenLabel()
-                    ->state(fn (ProcessedEmail $record): array => $record->attachments()->get()->all())
-                    ->columns(4)
-                    ->schema([
-                        TextEntry::make('filename')->label('Archivo')->weight(2),
-                        TextEntry::make('detected_kind')->label('Tipo real')
-                            ->badge()
-                            ->placeholder('—'),
-                        TextEntry::make('extension_mismatch')->label('Mismatch')
-                            ->badge()
-                            ->formatStateUsing(fn (bool $state): string => $state ? 'SÍ' : 'no')
-                            ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
-                        TextEntry::make('doc_type')->label('Tipo documental')
-                            ->badge()
-                            ->color(fn (?string $state): string => $state === 'desconocido' || $state === null ? 'warning' : 'success'),
-                        TextEntry::make('confidence')->label('Confianza')
-                            ->placeholder('—'),
-                        // Dentro de un RepeatableEntry cada entrada corresponde a UN
-                        // elemento del array, no al ProcessedEmail padre: por eso
-                        // aquí el parámetro inyectado se llama `$record` igual,
-                        // pero su tipo es el del hijo (Attachment).
-                        TextEntry::make('ocr_summary')->label('OCR')
-                            ->state(fn (?Attachment $record): ?string => $record?->ocr_used
-                                ? $record->ocr_engine.' · '.($record->ocr_confidence ?? '?').'%'
-                                : null)
-                            ->placeholder('No usado'),
-                        TextEntry::make('fields_json')->label('Campos extraídos')
-                            ->columnSpan(4)
-                            ->formatStateUsing(fn (mixed $state): string => $state
-                                ? json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
-                                : '—')
-                            ->limit(1200),
-                        TextEntry::make('extracted_text')->label('Texto extraído')
-                            ->columnSpan(4)
-                            ->limit(2000)
-                            ->placeholder('(sin texto)')
-                            ->tooltip(fn (?Attachment $record): string => (string) $record?->extracted_text),
-                    ]),
+                    ->columnSpanFull()
+                    ->html()
+                    ->state(fn (ProcessedEmail $record): string => view('filament.jobs.attachments-gallery', [
+                        'email'       => $record,
+                        'attachments' => $record->attachments()->get(),
+                    ])->render()),
             ]);
     }
 

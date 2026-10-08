@@ -28,11 +28,8 @@ class ViewJob extends ViewRecord
         ];
     }
 
-    protected function getHeaderSubheading(): ?string
+    public function getMaxContentWidth(): \Filament\Support\Enums\Width | string | null
     {
-        /** @var ProcessedEmail $record */
-        $record = $this->getRecord();
-
-        return $record->gmail_id.' · '.$record->attachments()->count().' adjunto(s)';
+        return \Filament\Support\Enums\Width::Full;
     }
 }

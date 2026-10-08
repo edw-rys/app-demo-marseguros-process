@@ -1,131 +1,454 @@
 {{--
-    Timeline de etapas de un job.
-
-    Se renderiza desde `JobInfolist::runsOf()`, que ya agrupó las etapas por
-    corrida del pipeline. Cada corrida es un bloque; dentro, las etapas por
-    adjunto se separan por nombre de archivo para que se distingan de las
-    etapas que corren una sola vez por correo.
+    Grafo de pipeline estilo CI/CD (GitLab / GitHub Actions / ArgoCD).
 --}}
 @php
-    $statusStyles = [
-        'passed'   => ['dot' => 'bg-success-500', 'label' => 'text-success-700 dark:text-success-400'],
-        'failed'   => ['dot' => 'bg-danger-500',  'label' => 'text-danger-700 dark:text-danger-400'],
-        'degraded' => ['dot' => 'bg-warning-500', 'label' => 'text-warning-700 dark:text-warning-400'],
-        'skipped'  => ['dot' => 'bg-gray-400',    'label' => 'text-gray-500 dark:text-gray-400'],
-        'running'  => ['dot' => 'bg-info-500',    'label' => 'text-info-700 dark:text-info-400'],
-    ];
+    use App\Enums\PipelineStage;
+    use Illuminate\Support\Str;
+
+    $cardOf = function (PipelineStage $case, array $source, ?\App\Models\Attachment $attachment = null): array {
+        $list = $source[$case->value] ?? [];
+        $statuses = array_column($list, 'status');
+
+        $status = match (true) {
+            $list === []                              => 'pending',
+            in_array('failed', $statuses, true)      => 'failed',
+            in_array('running', $statuses, true)     => 'running',
+            in_array('degraded', $statuses, true)    => 'degraded',
+            array_unique($statuses) === ['skipped']  => 'skipped',
+            default                                   => 'passed',
+        };
+
+        return [
+            'stage'      => $case,
+            'status'     => $status,
+            'ms'         => (int) array_sum(array_column($list, 'duration_ms')),
+            'count'      => count($list),
+            'executions' => $list,
+            'attachment' => $attachment,
+        ];
+    };
+
+    $cleanErrorText = function (?string $raw): string {
+        if (empty($raw)) return 'Se produjo un problema durante la ejecución de esta etapa.';
+        $trimmed = trim($raw);
+        if (str_starts_with($trimmed, '{')) {
+            $decoded = json_decode($trimmed, true);
+            if (isset($decoded['error']['message'])) {
+                $m = $decoded['error']['message'];
+                if (stripos($m, 'invalid attachment token') !== false) {
+                    return 'El token del archivo adjunto en Gmail no es válido o ya expiró.';
+                }
+                return $m;
+            }
+        }
+        if (stripos($raw, 'invalid attachment token') !== false) {
+            return 'El token del archivo adjunto en Gmail no es válido o ya expiró.';
+        }
+        return Str::limit(strip_tags($raw), 150);
+    };
 @endphp
 
-@if (empty($runs))
-    <p class="text-sm text-gray-500 dark:text-gray-400">
-        Este job todavía no tiene etapas registradas.
-    </p>
-@else
-    <div class="space-y-4">
-        @foreach ($runs as $index => $run)
-            @php
-                // El número viene de `job_stages.run`, no de la posición en la
-                // lista: las corridas llegan invertidas (la última primero) y
-                // numerarlas por posición mentiría sobre cuál es cuál.
-                $runNumber = (int) $run['number'];
-                $lastAttachmentId = null;
-            @endphp
+@once
+    <style>
+        {!! file_get_contents(public_path('css/gdv-pipeline.css')) !!}
+    </style>
+    <link rel="stylesheet" href="{{ asset('css/gdv-pipeline.css') }}">
+@endonce
 
-            <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <div class="flex flex-wrap items-center gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400">
-                    <span class="font-semibold text-gray-900 dark:text-gray-100">
-                        Corrida #{{ $runNumber }}
-                    </span>
+<div class="gdv">
+    @if ($run === null)
+        <div class="gdv-empty">
+            <p class="gdv-empty__title">Este correo todavía no tiene etapas registradas.</p>
+            <p class="gdv-empty__hint">Aparecerá el flujo en cuanto comience el procesamiento.</p>
+        </div>
+    @else
+        @php
+            $byKey = [];
+            foreach ($run['stages'] as $stage) {
+                $byKey[$stage->stage_key][] = $stage;
+            }
 
-                    @if ($index === 0 && count($runs) > 1)
-                        <span class="rounded bg-primary-100 px-2 py-0.5 text-primary-700 dark:bg-primary-900 dark:text-primary-300">
-                            última
-                        </span>
-                    @endif
+            // Grupos de etapas
+            $receptionCases = [
+                PipelineStage::Received,
+                PipelineStage::SubjectFilter,
+            ];
 
-                    <span>{{ $run['started']?->format('d/m/Y H:i:s') ?? '—' }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>stack {{ strtoupper((string) $run['stack']) }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ count($run['stages']) }} etapas</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ $run['total_ms'] < 1000 ? $run['total_ms'].' ms' : round($run['total_ms'] / 1000, 2).' s' }}</span>
+            $downloadCases = [
+                PipelineStage::Download,
+            ];
 
-                    @if ($run['degraded'])
-                        <span class="rounded bg-warning-100 px-2 py-0.5 text-warning-700 dark:bg-warning-900 dark:text-warning-300">
-                            degradada (fallback)
-                        </span>
-                    @endif
+            $perFileCases = [
+                PipelineStage::DetectKind,
+                PipelineStage::ExtractText,
+                PipelineStage::Classify,
+                PipelineStage::ExtractFields,
+            ];
 
-                    @if ($run['failed'])
-                        <span class="rounded bg-danger-100 px-2 py-0.5 text-danger-700 dark:bg-danger-900 dark:text-danger-300">
-                            con fallo
-                        </span>
-                    @endif
+            $validationCases = [
+                PipelineStage::Phase1Count,
+                PipelineStage::Phase2Validate,
+            ];
 
-                    @if (! $run['complete'])
-                        <span class="rounded bg-gray-100 px-2 py-0.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                            incompleta
-                        </span>
-                    @endif
+            $finishCases = [
+                PipelineStage::Reply,
+                PipelineStage::Done,
+            ];
+
+            // Tarjetas por grupo
+            $receptionCards = array_map(fn (PipelineStage $c): array => $cardOf($c, $byKey), $receptionCases);
+            $downloadCards  = array_map(fn (PipelineStage $c): array => $cardOf($c, $byKey), $downloadCases);
+            $linearPerFileCards = array_map(fn (PipelineStage $c): array => $cardOf($c, $byKey), $perFileCases);
+            $validationCards = array_map(fn (PipelineStage $c): array => $cardOf($c, $byKey), $validationCases);
+            $finishCards     = array_map(fn (PipelineStage $c): array => $cardOf($c, $byKey), $finishCases);
+
+            // Verificar si hay ramas por adjunto
+            $lanes = [];
+            foreach ($run['stages'] as $stage) {
+                if (! $stage->stageEnum()?->isPerAttachment() || ! $stage->attachment) {
+                    continue;
+                }
+                $attachment = $stage->attachment;
+                $key = $attachment->getKey();
+                $lanes[$key] ??= ['attachment' => $attachment, 'byKey' => []];
+                $lanes[$key]['byKey'][$stage->stage_key][] = $stage;
+            }
+
+            $hasBranching = count($lanes) > 0;
+            $visibleLanes = array_slice($lanes, 0, 4, true);
+
+            $totalMs = (int) $run['total_ms'];
+            $humanTotal = $totalMs < 1000
+                ? $totalMs.' ms'
+                : rtrim(rtrim(number_format($totalMs / 1000, 2, ',', ''), '0'), ',').' s';
+
+            $canvasId = 'gdv-canvas-' . ($run['number'] ?? 1) . '-' . uniqid();
+
+            // ── Diagnóstico y Resultado Final ──
+            $failedStage = collect($run['stages'])->firstWhere('status', 'failed');
+            $validationErrors = $email?->validationResults?->whereIn('status', ['fail', 'error']) ?? collect();
+            $attachmentsCount = $email?->attachments?->count() ?? count($lanes);
+
+            if ($run['failed'] || ($email?->status === 'failed' && $failedStage !== null)) {
+                $resultType = 'failed';
+                $resultBadgeText = 'Procesamiento detenido';
+                $resultTitle = $failedStage ? 'No se completó: ' . $failedStage->label() : 'El proceso no pudo completarse';
+                $resultExplanation = $cleanErrorText($failedStage?->error ?: $failedStage?->message);
+            } elseif ($email?->status === 'validated' || ($run['complete'] && $validationErrors->isEmpty())) {
+                $resultType = 'success';
+                $resultBadgeText = 'Documentación aprobada';
+                $resultTitle = 'Todos los documentos fueron validados correctamente';
+                $resultExplanation = 'El correo y sus adjuntos cumplen con los requisitos solicitados.';
+            } elseif ($email?->status === 'review' || $validationErrors->isNotEmpty()) {
+                $resultType = 'warning';
+                $resultBadgeText = 'Requiere revisión';
+                $resultTitle = 'Documentos incompletos o con observaciones';
+                $resultExplanation = $validationErrors->isNotEmpty()
+                    ? 'Observaciones: ' . $validationErrors->pluck('message')->filter()->implode(' · ')
+                    : 'Faltan documentos requeridos para completar la validación.';
+            } else {
+                $resultType = 'info';
+                $resultBadgeText = 'En proceso';
+                $resultTitle = 'Analizando documentos del correo';
+                $resultExplanation = 'Las etapas se están ejecutando en tiempo real.';
+            }
+        @endphp
+
+        <div class="gdv-run">
+            {{-- ── 1. Resumen del Resultado ── --}}
+            <div class="gdv-hero gdv-hero--{{ $resultType }}">
+                <div class="gdv-hero__main">
+                    <div class="gdv-hero__icon">
+                        @if ($resultType === 'success')
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        @elseif ($resultType === 'failed')
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        @else
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        @endif
+                    </div>
+
+                    <div class="gdv-hero__content">
+                        <div class="gdv-hero__eyebrow">
+                            <span class="gdv-hero__badge gdv-hero__badge--{{ $resultType }}">
+                                {{ $resultBadgeText }}
+                            </span>
+                        </div>
+
+                        <h3 class="gdv-hero__title">
+                            {{ $resultTitle }}
+                        </h3>
+
+                        <p class="gdv-hero__desc">
+                            {{ $resultExplanation }}
+                        </p>
+                    </div>
                 </div>
 
-                <ul class="space-y-0">
-                    @foreach ($run['stages'] as $stage)
+                <div class="gdv-hero__stats">
+                    <div class="gdv-hero__stat-card">
+                        <span class="gdv-hero__stat-label">Adjuntos</span>
+                        <span class="gdv-hero__stat-val">{{ $attachmentsCount }} {{ $attachmentsCount === 1 ? 'archivo' : 'archivos' }}</span>
+                    </div>
+
+                    <div class="gdv-hero__stat-card">
+                        <span class="gdv-hero__stat-label">Duración</span>
+                        <span class="gdv-hero__stat-val">{{ $humanTotal }}</span>
+                    </div>
+
+                    <div class="gdv-hero__stat-card">
+                        <span class="gdv-hero__stat-label">Ejecución</span>
+                        <span class="gdv-hero__stat-val">Corrida #{{ (int) $run['number'] }} · {{ $run['started']?->format('d/m/Y H:i') ?? '—' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ── 2. Canvas de Flujo Estilo CI/CD ── --}}
+            <div class="gdv-canvas-container" id="{{ $canvasId }}">
+                <!-- Controles de Zoom -->
+                <div class="gdv-canvas-controls">
+                    <button type="button" class="gdv-btn-ctrl" onclick="window.__gdvZoom('{{ $canvasId }}', 0.1)" title="Acercar (+)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <button type="button" class="gdv-btn-ctrl" onclick="window.__gdvZoom('{{ $canvasId }}', -0.1)" title="Alejar (-)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <button type="button" class="gdv-btn-ctrl" onclick="window.__gdvResetZoom('{{ $canvasId }}')" title="Restablecer">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    </button>
+                </div>
+
+                <div class="gdv-pipeline-flow" id="{{ $canvasId }}-workflow">
+                    {{-- Columna 1: Recepción --}}
+                    <div class="gdv-stage-column">
+                        <div class="gdv-stage-column__header">
+                            <span class="gdv-stage-column__title">Recepción</span>
+                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
+                        </div>
+                        <div class="gdv-stage-column__body">
+                            @foreach ($receptionCards as $card)
+                                @include('filament.jobs.partials.node', [
+                                    'stage'      => $card['stage'],
+                                    'status'     => $card['status'],
+                                    'ms'         => $card['ms'],
+                                    'count'      => $card['count'],
+                                    'executions' => $card['executions'],
+                                    'attachment' => $card['attachment'],
+                                ])
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="gdv-pipeline-link"></div>
+
+                    {{-- Columna 2: Descarga --}}
+                    <div class="gdv-stage-column">
+                        <div class="gdv-stage-column__header">
+                            <span class="gdv-stage-column__title">Descarga</span>
+                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
+                        </div>
+                        <div class="gdv-stage-column__body">
+                            @foreach ($downloadCards as $card)
+                                @include('filament.jobs.partials.node', [
+                                    'stage'      => $card['stage'],
+                                    'status'     => $card['status'],
+                                    'ms'         => $card['ms'],
+                                    'count'      => $card['count'],
+                                    'executions' => $card['executions'],
+                                    'attachment' => $card['attachment'],
+                                ])
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="gdv-pipeline-link"></div>
+
+                    {{-- Columna 3: Análisis Documental --}}
+                    <div class="gdv-stage-column">
+                        <div class="gdv-stage-column__header">
+                            <span class="gdv-stage-column__title">Análisis de Documentos</span>
+                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
+                        </div>
+                        <div class="gdv-stage-column__body">
+                            @if ($hasBranching)
+                                @foreach ($visibleLanes as $lane)
+                                    <div style="margin-bottom: 0.75rem;">
+                                        <div style="font-size: 0.6875rem; color: #94a3b8; font-weight: 700; margin-bottom: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;">
+                                            📄 {{ $lane['attachment']?->filename ?? 'Archivo' }}
+                                        </div>
+                                        @foreach ($perFileCases as $fileCase)
+                                            @php
+                                                $fileCard = $cardOf($fileCase, $lane['byKey'], $lane['attachment']);
+                                            @endphp
+                                            @include('filament.jobs.partials.node', [
+                                                'stage'      => $fileCard['stage'],
+                                                'status'     => $fileCard['status'],
+                                                'ms'         => $fileCard['ms'],
+                                                'count'      => $fileCard['count'],
+                                                'executions' => $fileCard['executions'],
+                                                'attachment' => $fileCard['attachment'],
+                                            ])
+                                        @endforeach
+                                    </div>
+                                @endforeach
+                            @else
+                                @foreach ($linearPerFileCards as $card)
+                                    @include('filament.jobs.partials.node', [
+                                        'stage'      => $card['stage'],
+                                        'status'     => $card['status'],
+                                        'ms'         => $card['ms'],
+                                        'count'      => $card['count'],
+                                        'executions' => $card['executions'],
+                                        'attachment' => $card['attachment'],
+                                    ])
+                                @endforeach
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="gdv-pipeline-link"></div>
+
+                    {{-- Columna 4: Validación --}}
+                    <div class="gdv-stage-column">
+                        <div class="gdv-stage-column__header">
+                            <span class="gdv-stage-column__title">Validación</span>
+                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
+                        </div>
+                        <div class="gdv-stage-column__body">
+                            @foreach ($validationCards as $card)
+                                @include('filament.jobs.partials.node', [
+                                    'stage'      => $card['stage'],
+                                    'status'     => $card['status'],
+                                    'ms'         => $card['ms'],
+                                    'count'      => $card['count'],
+                                    'executions' => $card['executions'],
+                                    'attachment' => $card['attachment'],
+                                ])
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="gdv-pipeline-link"></div>
+
+                    {{-- Columna 5: Finalización --}}
+                    <div class="gdv-stage-column">
+                        <div class="gdv-stage-column__header">
+                            <span class="gdv-stage-column__title">Finalización</span>
+                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
+                        </div>
+                        <div class="gdv-stage-column__body">
+                            @foreach ($finishCards as $card)
+                                @include('filament.jobs.partials.node', [
+                                    'stage'      => $card['stage'],
+                                    'status'     => $card['status'],
+                                    'ms'         => $card['ms'],
+                                    'count'      => $card['count'],
+                                    'executions' => $card['executions'],
+                                    'attachment' => $card['attachment'],
+                                ])
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ── 3. Panel de Metadatos y Datos Capturados por Etapa ── --}}
+            <div class="gdv-metadata-panel">
+                <div class="gdv-metadata-header">
+                    <div class="gdv-metadata-header__title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: #38bdf8;">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                        <span>Metadatos y Datos Capturados por Etapa</span>
+                    </div>
+                    <span class="gdv-metadata-count">
+                        {{ count($run['stages']) }} {{ count($run['stages']) === 1 ? 'etapa registrada' : 'etapas registradas' }}
+                    </span>
+                </div>
+
+                <div class="gdv-metadata-list">
+                    @forelse ($run['stages'] as $stg)
                         @php
-                            $style = $statusStyles[$stage->status] ?? $statusStyles['skipped'];
-                            $isPerAttachment = $stage->stageEnum()?->isPerAttachment();
-                            $filename = $stage->attachment?->filename;
+                            $stgStatus = $stg->status;
+                            $stgDetail = $stg->detail_json ?? [];
                         @endphp
-
-                        @if ($isPerAttachment && $filename && $filename !== $lastAttachmentId)
-                            <li class="flex items-center gap-2 pt-3 pb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                                <span class="font-mono">{{ $filename }}</span>
-                            </li>
-                        @endif
-
-                        <li class="flex items-start gap-3 py-1.5">
-                            <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full {{ $style['dot'] }}"></span>
-
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-baseline gap-x-2">
-                                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                        {{ $stage->label() }}
-                                    </span>
-                                    <span class="text-xs {{ $style['label'] }}">{{ $stage->statusEnum()?->label() ?? $stage->status }}</span>
-                                    <span class="text-xs text-gray-400 dark:text-gray-500">
-                                        {{ $stage->durationForHumans() }}
-                                    </span>
-                                    @if ($filename)
-                                        <span class="truncate font-mono text-xs text-gray-400 dark:text-gray-500">{{ $filename }}</span>
+                        <div class="gdv-metadata-card">
+                            <div class="gdv-metadata-card__head">
+                                <div class="gdv-metadata-card__left">
+                                    <div class="gdv-step-status gdv-step-status--{{ $stgStatus }}" style="width: 20px; height: 20px;">
+                                        @if ($stgStatus === 'passed')
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                        @elseif ($stgStatus === 'failed')
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        @elseif ($stgStatus === 'running')
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="gdv-spin"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="10"/></svg>
+                                        @else
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+                                        @endif
+                                    </div>
+                                    <span class="gdv-metadata-card__name">{{ $stg->label() }}</span>
+                                    @if ($stg->attachment)
+                                        <span class="gdv-metadata-card__file">
+                                            📄 {{ $stg->attachment->filename }}
+                                        </span>
                                     @endif
                                 </div>
 
-                                @if ($stage->message)
-                                    <p class="text-xs text-gray-600 dark:text-gray-400">{{ $stage->message }}</p>
+                                <div class="gdv-metadata-card__right">
+                                    <span class="gdv-metadata-card__time">
+                                        ⏱️ {{ $stg->durationForHumans() }}
+                                    </span>
+                                    <span class="gdv-status-pill gdv-status-pill--{{ $stgStatus }}">
+                                        {{ $stg->statusEnum()?->label() ?? ucfirst($stgStatus) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="gdv-metadata-card__body">
+                                @if (filled($stg->error))
+                                    <div class="gdv-error-alert" style="margin-bottom: 0.5rem; padding: 0.5rem 0.75rem;">
+                                        <strong>⚠️ Error:</strong> {{ $cleanErrorText($stg->error) }}
+                                    </div>
                                 @endif
 
-                                @if ($stage->error)
-                                    <p class="text-xs text-danger-600 dark:text-danger-400">{{ $stage->error }}</p>
+                                @if (filled($stg->message))
+                                    <div style="font-size: 0.8125rem; color: #cbd5e1; margin-bottom: 0.5rem;">
+                                        💬 {{ $stg->message }}
+                                    </div>
                                 @endif
 
-                                @if (! empty($stage->detail_json))
-                                    <details class="mt-1">
-                                        <summary class="cursor-pointer text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                                            detalle
-                                        </summary>
-                                        <pre class="mt-1 max-h-56 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ json_encode($stage->detail_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
-                                    </details>
+                                @if (!empty($stgDetail))
+                                    <div class="gdv-meta-tags-wrap">
+                                        @foreach ($stgDetail as $k => $v)
+                                            @php
+                                                if (in_array($k, ['raw_request', 'raw_response', 'text'], true)) continue;
+                                                $formattedVal = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (is_bool($v) ? ($v ? 'Sí' : 'No') : (string) $v);
+                                                $formattedKey = ucwords(str_replace(['_', '-'], ' ', $k));
+                                            @endphp
+                                            <div class="gdv-meta-tag">
+                                                <span class="gdv-meta-tag__key">{{ $formattedKey }}:</span>
+                                                <span class="gdv-meta-tag__val">{{ Str::limit($formattedVal, 100) }}</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @elseif (blank($stg->error) && blank($stg->message))
+                                    <div style="font-size: 0.75rem; color: #64748b;">
+                                        Paso completado sin metadatos adicionales.
+                                    </div>
                                 @endif
                             </div>
-                        </li>
-
-                        @if ($filename)
-                            @php $lastAttachmentId = $filename; @endphp
-                        @endif
-                    @endforeach
-                </ul>
+                        </div>
+                    @empty
+                        <div style="text-align: center; color: #64748b; padding: 1.5rem; font-size: 0.8125rem;">
+                            No hay etapas registradas para esta corrida.
+                        </div>
+                    @endforelse
+                </div>
             </div>
-        @endforeach
-    </div>
-@endif
+        </div>
+    @endif
+</div>

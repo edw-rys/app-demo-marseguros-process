@@ -87,7 +87,7 @@ class FieldPatternForm
                         Placeholder::make('_preview')
                             ->label('Lo que se extraería')
                             ->content(fn (Get $get): HtmlString => new HtmlString(
-                                e(self::preview($get)) ?: '<span class="text-gray-400">—</span>',
+                                e(self::preview($get)) ?: '<span class="gdv-faint">—</span>',
                             )),
                     ]),
             ]);

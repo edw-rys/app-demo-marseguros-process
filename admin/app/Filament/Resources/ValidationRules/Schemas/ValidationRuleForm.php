@@ -117,7 +117,7 @@ class ValidationRuleForm
                         Placeholder::make('_facts')
                             ->label('')
                             ->content(new HtmlString(
-                                '<ul class="list-disc pl-4 text-sm space-y-1">'
+                                '<ul class="gdv-bullets">'
                                 .implode('', array_map(
                                     static fn (string $f): string => '<li><code>'.$f.'</code></li>',
                                     self::CUSTOM_FACTS,

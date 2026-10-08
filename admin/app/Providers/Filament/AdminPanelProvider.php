@@ -9,13 +9,17 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Support\Assets\Css;
+use Filament\Support\Assets\Js;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use App\Filament\Widgets\LlmCostWidget;
 use App\Filament\Widgets\PipelineStatsWidget;
 use App\Filament\Widgets\StageFunnelWidget;
 use App\Filament\Widgets\WorkerHealthWidget;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Foundation\Vite;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
@@ -34,6 +38,21 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 // #038fac — el teal de Marseguros (CLAUDE.md §15).
                 'primary' => Color::hex('#038fac'),
+            ])
+            // CSS del proyecto (Tailwind compilado por Vite) como asset
+            // ADICIONAL. No se usa `viteTheme()` a propósito: ese método
+            // REEMPLAZA el theme por defecto, y el theme por defecto es lo que
+            // sirve `/css/filament/filament/app.css` — o sea, todo el CSS de
+            // Filament. Con `viteTheme()` el panel abre sin una sola hoja de
+            // estilo y se ve como texto pelado.
+            //
+            // `Vite` resuelve solo: usa `public/hot` si el server de Vite está
+            // levantado, y `public/build/manifest.json` si no. Por eso no hay
+            // ningún nombre de archivo con hash hardcodeado acá.
+            ->assets([
+                Css::make('gdv-pipeline', asset('css/gdv-pipeline.css')),
+                Js::make('gdv-pipeline', asset('js/gdv-pipeline.js')),
+                Css::make('app-css')->html(fn (): Htmlable => app(Vite::class)('resources/css/app.css')),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

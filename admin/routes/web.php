@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AttachmentDownloadController;
 use App\Http\Controllers\GmailOAuthController;
 use App\Http\Controllers\JobStreamController;
 use Illuminate\Support\Facades\Route;
@@ -54,3 +55,27 @@ Route::middleware(Filament\Http\Middleware\Authenticate::class)
 Route::middleware(Filament\Http\Middleware\Authenticate::class)
     ->get('jobs/{uuid}/stream', JobStreamController::class)
     ->name('jobs.stream');
+
+/*
+|--------------------------------------------------------------------------
+| Descarga de adjuntos
+|--------------------------------------------------------------------------
+|
+| Los adjuntos no se sirven por `public/storage` — `storage/app/attachments`
+| no es público a propósito: son documentos de seguro que llegan de un remitente
+| externo. El enlace de descarga del detalle del job va a esta ruta.
+|
+| El middleware es el mismo de las otras dos: sin sesión de panel, cualquiera
+| que conozca la URL descarga los adjuntos de cualquier job.
+|
+*/
+
+use App\Http\Controllers\DownloadAllAttachmentsController;
+
+Route::middleware(Filament\Http\Middleware\Authenticate::class)
+    ->get('attachments/{uuid}/download', AttachmentDownloadController::class)
+    ->name('attachments.download');
+
+Route::middleware(Filament\Http\Middleware\Authenticate::class)
+    ->get('jobs/{uuid}/attachments/download-all', DownloadAllAttachmentsController::class)
+    ->name('jobs.attachments.download-all');

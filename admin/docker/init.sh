@@ -98,13 +98,33 @@ find "$APP_ROOT/storage" -mindepth 1 -maxdepth 1 \
     ! -name private -exec chmod -R 775 {} + 2>/dev/null || true
 
 # El directorio en sí sí hay que dejarlo utilizable: es el punto de escritura
-# del token. Solo la WARNING, sin abortar — con `set -e` un fallo de `chmod`
-# tiraría el arranque, y es preferible un admin que avisa a uno en crash-loop.
-chmod 775 "$APP_ROOT/storage/private" 2>/dev/null || true
+# del token de OAuth.
+#
+# Con el bind-mount del compose base, `storage/private` es el directorio del
+# HOST, con el owner del usuario que hizo el deploy (típicamente `almalinux`,
+# uid 1000 en RHEL pero con un uid distinto al de `www-data` de Alpine).
+# Entonces `www-data` lee pero no escribe, y la autorización muere recién en el
+# callback, con:
+#
+#     file_put_contents(.../gmail-token.json): Failed to open stream: Permission denied
+#
+# `init.sh` corre como root, así que puede corregirlo. Es el único lugar donde
+# se hace a propósito: los archivos JSON quedan en `600`, que es lo que quiere
+# una credencial, y el resto de `storage/` sigue con el `chmod` amplio de
+# arriba.
+chown -R www-data:www-data "$APP_ROOT/storage/private" 2>/dev/null || true
+chmod 750 "$APP_ROOT/storage/private" 2>/dev/null || true
+find "$APP_ROOT/storage/private" -maxdepth 1 -name '*.json' \
+    -exec chmod 600 {} + 2>/dev/null || true
+
+# Solo la WARNING, sin abortar: con `set -e` un fallo acá tiraría el arranque
+# entero, y es preferible un admin que avisa a uno en crash-loop. El síntoma de
+# esta WARNING aparece tarde (en el callback de OAuth), así que conviene
+# anticiparla.
 if ! [ -w "$APP_ROOT/storage/private" ]; then
     echo "[INIT] AVISO: $APP_ROOT/storage/private no es escribible por www-data."
-    echo "[INIT]        No se va a poder guardar el refresh token de OAuth."
-    echo "[INIT]        En el host:  chmod 775 admin/storage/private"
+    echo "[INIT]        La autorización de OAuth va a fallar al guardar el token."
+    echo "[INIT]        En el host:  chown -R 1000:1000 admin/storage/private"
 fi
 
 # ── Base de datos ────────────────────────────────────────────────────────────

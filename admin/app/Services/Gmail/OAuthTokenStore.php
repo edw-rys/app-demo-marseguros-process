@@ -2,6 +2,8 @@
 
 namespace App\Services\Gmail;
 
+use Illuminate\Support\Facades\Log;
+
 /**
  * Guarda el refresh token de OAuth en `storage/private/gmail-token.json`.
  *
@@ -57,7 +59,30 @@ class OAuthTokenStore
             json_encode($token, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
         );
 
-        chmod($path, 0600);
+        // El `chmod` NO puede abortar la autorización: el token ya está escrito
+        // y es lo que importa para que funcione. Fallar acá tiraría la
+        // autorización entera por endurecer permisos, que es lo contrario de
+        // lo que se quiere.
+        //
+        // El caso real es `Operation not permitted` cuando el archivo YA
+        // existía en el host y lo creó otro usuario —típicamente el del deploy,
+        // con el bind-mount de `storage/private`—. `www-data` puede escribirlo
+        // porque el directorio se lo deja, pero no puede cambiarle los permisos
+        // a un archivo que no es suyo: `chmod` exige ser el dueño.
+        //
+        // La corrección de verdad es que el archivo lo cree `www-data` desde
+        // cero (borrando el viejo del host, o `chown` en el despliegue). Acá
+        // solo se evita que eso parezca un fallo de Google.
+        if (! @chmod($path, 0600)) {
+            Log::warning('No se pudo dejar gmail-token.json en 0600.', [
+                'path'     => $path,
+                'owner'    => @fileowner($path) ?: null,
+                'usuario'  => function_exists('posix_getpwuid') && @fileowner($path)
+                                ? (posix_getpwuid(@fileowner($path))['name'] ?? null)
+                                : null,
+                'permisos' => substr(sprintf('%o', @fileperms($path)), -4),
+            ]);
+        }
     }
 
     public function forget(): void

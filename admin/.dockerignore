@@ -1,50 +1,25 @@
-# Lo que no debe entrar en el contexto de build.
-#
-# Regla práctica: si un archivo está acá, el contenedor no lo necesita para
-# arrancar. Si lo sacas y algo falla, es porque faltaba de verdad.
+# El `COPY . .` del Dockerfile trae todo lo que hay acá. Sin este archivo se
+# cuelgan también `node_modules/` (~100 MB, ya instalado en la etapa `assets`)
+# y el `public/build/` local, que pisa el que generó esa etapa.
 
-# Secretos. El `.env` se inyecta en runtime con `env_file`; si estuviera en la
-# imagen, quedaría en una capa del registry para siempre.
+node_modules
+npm-debug.log*
+
+.git
+.gitignore
+.github
+
+# `public/build` lo produce la etapa `assets`; el local es de otra máquina.
+public/build
+public/hot
+
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/framework/testing/*
+
+.DS_Store
 .env
 .env.*
 !.env.example
-
-# La credencial de Google nunca se copia.
-storage/private/
-**/service-account.json
-
-# Dependencias: se reinstalan dentro de la imagen con la extensión de PHP
-# correcta. Copiar el `vendor` del host (compilado para otra plataforma) rompe
-# las extensiones binarias.
-vendor/
-node_modules/
-
-# Datos locales: la imagen no debe llevar la base ni los adjuntos de quien la
-# construyó.
-database/*.sqlite
-database/*.sqlite-*
-storage/app/*
-storage/logs/*
-bootstrap/cache/*.php
-
-# Ruido de desarrollo.
-.git
-.gitignore
-.github/
-.phpunit.result.cache
-.phpunit.cache
-tests/
-phpunit.xml
-README.md
-CLAUDE.md
-AGENTS.md
-.vscode/
-.idea/
-*.md
-*.log
-
-# Los archivos de Docker tampoco se necesitan dentro del contexto: el build ya
-# los usó.
-Dockerfile
-.dockerignore
-docker-compose*.yml

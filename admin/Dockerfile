@@ -1,3 +1,40 @@
+# ── Assets ───────────────────────────────────────────────────────────────
+# Etapa aparte que existe SOLO para compilar `public/build`. La imagen final no
+# copia Node: lo que sale de acá son los archivos estáticos.
+#
+# Sin esto el panel no tenía utilidades de Tailwind: el `theme.css` de Filament
+# solo trae clases `fi-*`, y como no había `public/build`, todo lo que se
+# escribía en los blades y en el HTML que se arma en PHP (`flex`, `gap-3`,
+# `text-sm`) salía como texto plano. Las vistas se veían como listas de
+# palabras.
+#
+# El `package.json` y el `vite.config.js` ya estaban escritos; lo que faltaba
+# era alguien ejecutándolos.
+FROM node:22-alpine AS assets
+
+WORKDIR /build
+
+# Primero los manifiestos, después el código: mientras no cambien las
+# dependencias, la capa de `npm ci` no se invalida y un rebuild es de segundos.
+COPY package.json package-lock.json* ./
+
+RUN npm ci --no-audit --no-fund \
+    || npm install --no-audit --no-fund
+
+COPY resources/ ./resources/
+COPY public/ ./public/
+COPY vite.config.js ./
+
+# El plugin de fuentes (`bunny`) hace una petición de red al indexar. Si el
+# build falla por eso, el error real queda dos capas más abajo; conviene verlo
+# en el log y no descubrirlo en runtime.
+RUN npm run build \
+    && test -f public/build/manifest.json \
+    || (echo "ERROR: el build de Vite no dejó public/build/manifest.json." \
+        && ls -la public/build 2>&1 \
+        && exit 1)
+
+
 FROM php:8.3-fpm-alpine
 
 LABEL maintainer="marseguros" \
@@ -98,6 +135,11 @@ RUN composer install \
     && test -f vendor/autoload.php
 
 COPY --chown=www-data:www-data . .
+
+# El build va DESPUÉS del `COPY . .` a propósito: si el host tiene un
+# `public/build/` viejo (de un `npm run build` local) o ninguno, este es el que
+# manda. Al revés, un build local sin trackear pisaría el correcto.
+COPY --from=assets --chown=www-data:www-data /build/public/build ./public/build
 
 # Los scripts de composer (`package:discover`, `filament:upgrade`) corren aquí
 # y no en el `install` de arriba: necesitan el código completo para que

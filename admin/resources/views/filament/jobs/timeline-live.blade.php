@@ -6,7 +6,11 @@
     escribe las etapas nuevas arriba. Si el JS no corre —sin soporte, error de
     red, un filtro de extensión— el timeline de siempre se ve igual.
 
-    El JS va inline a propósito. Son ~150 líneas y necesita vivir en la página
+    Solo se renderiza para jobs QUE NO TERMINARON (lo filtra `JobInfolist`): en
+    un job ya cerrado el stream no tiene nada que mandar y su indicador de
+    "conectando" queda colgado para siempre al lado del contenido real.
+
+    El JS va inline a propósito. Son ~180 líneas y necesita vivir en la página
     que lo usa: separarlo en un asset obligaría a agregarlo al build de Filament
     y a invalidar la caché de `/build`, que es `immutable` por un año.
 --}}
@@ -16,34 +20,30 @@
     $streamUrl = route('jobs.stream', ['uuid' => $record->uuid]);
 @endphp
 
-<div id="gdv-live"
-     data-stream="{{ $streamUrl }}">
-
+<div class="gdv-live" id="gdv-live" data-stream="{{ $streamUrl }}">
     {{-- Barra de estado: conexión y etapa en curso. --}}
-    <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <span data-role="dot"
-              class="h-2 w-2 rounded-full bg-gray-400"></span>
+    <div class="gdv-live__bar">
+        <span data-role="dot" class="gdv-live__dot"></span>
 
-        <span data-role="conn"
-              class="font-medium text-gray-600 dark:text-gray-400">
-            Conectando al pipeline…
-        </span>
+        <span data-role="conn">Conectando al pipeline…</span>
 
-        <span data-role="stage"
-              class="hidden items-center gap-1 rounded bg-info-100 px-2 py-0.5 text-info-700 dark:bg-info-900 dark:text-info-300">
-            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-info-500"></span>
+        <span data-role="stage" class="gdv-badge gdv-badge--info" hidden>
             <span data-role="stage-label">—</span>
         </span>
 
-        <button type="button"
-                data-role="reload"
-                class="ml-auto hidden rounded border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
+        {{-- Valla de seguridad: si el stream no abre en 10 s, el texto de
+             arriba queda mintiendo ("conectando" no es lo que está pasando). --}}
+        <span data-role="timeout-warning" class="gdv-live__warn" hidden>
+            Sin respuesta del pipeline. Puede seguir corriendo: recargá para ver el estado.
+        </span>
+
+        <button type="button" data-role="reload" class="gdv-dl gdv-dl--ghost" hidden>
             Ver detalle completo
         </button>
     </div>
 
     {{-- Contenedor de las etapas que llegan por el stream. --}}
-    <ul data-role="live-stages" class="space-y-0"></ul>
+    <ul data-role="live-stages"></ul>
 </div>
 
 @once
@@ -52,16 +52,20 @@
             window.__gdvLiveTimeline = (function () {
                 'use strict';
 
-                // ── Paleta ──────────────────────────────────────────────────
-                // Las mismas clases que usa `timeline.blade.php` a mano, para
-                // que una etapa en vivo se vea idéntica a una ya guardada. Si
-                // se cambia uno hay que cambiar el otro.
+                // ── Clases ───────────────────────────────────────────────────
+                // Las MISMAS que usa `partials/node.blade.php` a mano, para que
+                // una etapa en vivo se vea idéntica a una ya guardada. Si se
+                // cambia una hay que cambiar la otra.
+                //
+                // No son utilidades de Tailwind porque en este panel no existen:
+                // el `theme.css` de Filament solo trae clases `fi-*`. Ver el
+                // comentario de `public/css/gdv-pipeline.css`.
                 var STATUS = {
-                    passed:   { dot: 'bg-success-500', label: 'text-success-700 dark:text-success-400', text: 'OK' },
-                    failed:   { dot: 'bg-danger-500',  label: 'text-danger-700 dark:text-danger-400',  text: 'Falló' },
-                    degraded: { dot: 'bg-warning-500',  label: 'text-warning-700 dark:text-warning-400',  text: 'Degradado' },
-                    skipped:  { dot: 'bg-gray-400',    label: 'text-gray-500 dark:text-gray-400',      text: 'Omitido' },
-                    running:  { dot: 'bg-info-500',    label: 'text-info-700 dark:text-info-400',      text: 'Corriendo' }
+                    passed:   { node: 'gdv-node--passed',   dot: 'gdv-dot--passed',   label: '',                text: 'OK' },
+                    failed:   { node: 'gdv-node--failed',   dot: 'gdv-dot--failed',   label: 'gdv-text--error', text: 'Error' },
+                    degraded: { node: 'gdv-node--degraded', dot: 'gdv-dot--degraded', label: 'gdv-text--warn',  text: 'Degradado' },
+                    skipped:  { node: 'gdv-node--skipped',  dot: 'gdv-dot--skipped',  label: '',                text: 'Omitida' },
+                    running:  { node: 'gdv-node--running',  dot: 'gdv-dot--running',  label: '',                text: 'En curso' }
                 };
 
                 var root = document.getElementById('gdv-live');
@@ -73,6 +77,7 @@
                 var elDot = root.querySelector('[data-role="dot"]');
                 var elStage = root.querySelector('[data-role="stage"]');
                 var elStageLabel = root.querySelector('[data-role="stage-label"]');
+                var elTimeoutWarning = root.querySelector('[data-role="timeout-warning"]');
                 var elReload = root.querySelector('[data-role="reload"]');
 
                 var source = null;
@@ -92,7 +97,13 @@
                 // estado en ese momento, que ya es terminal.
                 var sawState = false;
 
-                function text(value) { return value == null ? '' : String(value); }
+                // "Conectando…" sin que pase nada es peor que no decir nada: el
+                // usuario espera un evento que no va a llegar y no sabe si el
+                // job se trabó o si solo falta el stream.
+                var watchdog = setTimeout(function () {
+                    elTimeoutWarning.hidden = false;
+                    elReload.hidden = false;
+                }, 10000);
 
                 function el(tag, className, content) {
                     var node = document.createElement(tag);
@@ -103,22 +114,18 @@
 
                 function setConn(state, label) {
                     elConn.textContent = label;
-                    elDot.className = 'h-2 w-2 rounded-full ' + (
-                        state === 'live'      ? 'bg-success-500 animate-pulse' :
-                        state === 'reconnecting' ? 'bg-warning-500 animate-pulse' :
-                        state === 'error'      ? 'bg-danger-500' :
-                                                 'bg-gray-400'
-                    );
+                    elDot.className = 'gdv-live__dot gdv-live__dot--' +
+                        (state === 'live'        ? 'live' :
+                         state === 'reconnecting' ? 'reconnecting' :
+                         state === 'error'        ? 'error' : 'idle');
                 }
 
                 function setStage(label) {
                     if (!label) {
-                        elStage.classList.add('hidden');
-                        elStage.classList.remove('inline-flex');
+                        elStage.hidden = true;
                         return;
                     }
-                    elStage.classList.remove('hidden');
-                    elStage.classList.add('inline-flex');
+                    elStage.hidden = false;
                     elStageLabel.textContent = label;
                 }
 
@@ -130,46 +137,35 @@
                     // etapas por adjunto (detect_kind, extract_text, classify,
                     // extract_fields) se repetirían sin contexto si no.
                     if (stage.filename && stage.filename !== lastFilename) {
-                        var head = el('li', 'flex items-center gap-2 pt-3 pb-1 text-xs font-medium text-gray-500 dark:text-gray-400');
-                        head.appendChild(el('span', 'font-mono', stage.filename));
-                        list.appendChild(head);
+                        list.appendChild(el('li', 'gdv-log__file', stage.filename));
                         lastFilename = stage.filename;
                     }
 
-                    var row = el('li', 'flex items-start gap-3 py-1.5 gdv-live-row');
-                    row.dataset.sequence = stage.sequence;
+                    var row = el('li', 'gdv-log__row');
+                    row.appendChild(el('span', 'gdv-log__dot gdv-log__dot--' + stage.status));
 
-                    var dot = el('span', 'mt-1.5 h-2 w-2 shrink-0 rounded-full ' + style.dot);
-                    if (stage.status === 'running') {
-                        dot.classList.add('animate-pulse', 'ring-2', 'ring-info-300');
-                    }
-                    row.appendChild(dot);
+                    var body = el('div', 'gdv-log__body');
+                    var head = el('div', 'gdv-log__head');
 
-                    var body = el('div', 'min-w-0 flex-1');
-                    var head2 = el('div', 'flex flex-wrap items-baseline gap-x-2');
-
-                    head2.appendChild(el('span', 'text-sm font-medium text-gray-900 dark:text-gray-100', stage.label));
-                    head2.appendChild(el('span', 'text-xs ' + style.label, style.text));
+                    head.appendChild(el('span', 'gdv-log__title', stage.label));
+                    head.appendChild(el('span', 'gdv-log__status ' + style.label, style.text));
 
                     if (stage.duration_ms != null) {
-                        head2.appendChild(el('span', 'text-xs text-gray-400 dark:text-gray-500', formatMs(stage.duration_ms)));
-                    }
-                    if (stage.filename) {
-                        head2.appendChild(el('span', 'truncate font-mono text-xs text-gray-400 dark:text-gray-500', stage.filename));
+                        head.appendChild(el('span', 'gdv-log__duration', formatMs(stage.duration_ms)));
                     }
 
-                    body.appendChild(head2);
+                    body.appendChild(head);
 
                     if (stage.message) {
-                        body.appendChild(el('p', 'text-xs text-gray-600 dark:text-gray-400', stage.message));
+                        body.appendChild(el('p', 'gdv-log__msg', stage.message));
                     }
                     if (stage.error) {
-                        body.appendChild(el('p', 'text-xs text-danger-600 dark:text-danger-400', stage.error));
+                        body.appendChild(el('p', 'gdv-log__err', stage.error));
                     }
                     if (stage.description && stage.status === 'running') {
                         // Solo mientras corre: es el texto que explica qué está
                         // pasando ahora mismo.
-                        body.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 italic', stage.description));
+                        body.appendChild(el('p', 'gdv-log__msg', stage.description));
                     }
 
                     row.appendChild(body);
@@ -205,7 +201,11 @@
                     source = new EventSource(url + (lastSequence ? '?last_event_id=' + lastSequence : ''));
                     source.lastEventId = String(lastSequence);
 
-                    source.addEventListener('open', function () { setConn('live', 'En vivo'); });
+                    source.addEventListener('open', function () {
+                        clearTimeout(watchdog);
+                        elTimeoutWarning.hidden = true;
+                        setConn('live', 'En vivo');
+                    });
 
                     source.addEventListener('estado', function (e) {
                         var data = JSON.parse(e.data);
@@ -256,7 +256,7 @@
                         setTimeout(function () { window.location.reload(); }, 600);
                     });
 
-                    source.addEventListener('timeout', function (e) {
+                    source.addEventListener('timeout', function () {
                         // Corte por `stream.max_seconds`, NO fin del job. Se
                         // cierra para que el `EventSource` reconecte limpio y
                         // el replay siga desde `last_event_id`. Recargar la
@@ -277,7 +277,7 @@
                         // readyState es CLOSED ya no va a reintentar.
                         if (!source || source.readyState === EventSource.CLOSED) {
                             setConn('error', 'Se perdió la conexión. Abriendo el detalle…');
-                            elReload.classList.remove('hidden');
+                            elReload.hidden = false;
                         } else {
                             setConn('reconnecting', 'Reconectando…');
                         }

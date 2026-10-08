@@ -99,7 +99,7 @@ class ValidationPromptForm
                     \Filament\Forms\Components\Placeholder::make('_chars')
                         ->label('')
                         ->content(fn (ValidationPrompt $record): HtmlString => new HtmlString(
-                            '<span class="text-sm text-gray-500">'
+                            '<span class="gdv-meta">'
                             .strlen((string) $record->prompt_text)
                             .' caracteres</span>',
                         )),

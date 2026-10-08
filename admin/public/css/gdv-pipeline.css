@@ -1,0 +1,972 @@
+/*
+ * gdv-pipeline.css — CI/CD Pipeline Flow (GitLab / GitHub Actions style)
+ * Clean dark slate theme with status indicators:
+ * - Green (#10b981) on passed (✓)
+ * - Red (#ef4444) on failed (✕)
+ * - Gray (#64748b) on pending / skipped
+ * - Blue (#0284c7) on running
+ */
+
+:root,
+.gdv {
+    --gdv-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --gdv-text: #f8fafc;
+    --gdv-muted: #94a3b8;
+    --gdv-faint: #64748b;
+    --gdv-border: #2c3547;
+    --gdv-surface: #1a202c;
+    --gdv-surface-2: #161a24;
+    --gdv-canvas-bg: #151821;
+
+    --gdv-ok: #10b981;
+    --gdv-error: #ef4444;
+    --gdv-warn: #f59e0b;
+    --gdv-info: #0284c7;
+}
+
+.gdv {
+    font-family: var(--gdv-font);
+    color: var(--gdv-text);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.gdv * {
+    box-sizing: border-box;
+}
+
+/* ── Run Container ──────────────────────────────────────────────────────── */
+
+.gdv-run {
+    border: 1px solid var(--gdv-border);
+    border-radius: 0.875rem;
+    background: var(--gdv-surface);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    width: 100%;
+}
+
+/* ── 1. Resumen Superior (Hero Compacto) ────────────────────────────────── */
+
+.gdv-hero {
+    padding: 1.125rem 1.5rem;
+    border-bottom: 1px solid var(--gdv-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    background: #1b202c;
+}
+
+.gdv-hero--failed {
+    border-left: 4px solid #ef4444;
+}
+
+.gdv-hero--success {
+    border-left: 4px solid #10b981;
+}
+
+.gdv-hero--warning {
+    border-left: 4px solid #f59e0b;
+}
+
+.gdv-hero--info {
+    border-left: 4px solid #0284c7;
+}
+
+.gdv-hero__main {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.gdv-hero__icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.625rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.gdv-hero--failed .gdv-hero__icon {
+    background: #ef4444;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.gdv-hero--success .gdv-hero__icon {
+    background: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.gdv-hero--warning .gdv-hero__icon {
+    background: #f59e0b;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+}
+
+.gdv-hero--info .gdv-hero__icon {
+    background: #0284c7;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+}
+
+.gdv-hero__icon svg {
+    width: 22px !important;
+    height: 22px !important;
+}
+
+.gdv-hero__content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.gdv-hero__eyebrow {
+    margin-bottom: 0.2rem;
+}
+
+.gdv-hero__badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.gdv-hero__badge--failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.gdv-hero__badge--success {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.gdv-hero__badge--warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.gdv-hero__badge--info {
+    background: rgba(2, 132, 199, 0.2);
+    color: #38bdf8;
+}
+
+.gdv-hero__title {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.gdv-hero__desc {
+    font-size: 0.8125rem;
+    color: #cbd5e1;
+    margin: 0.2rem 0 0;
+}
+
+.gdv-hero__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gdv-hero__stat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.gdv-hero__stat-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.gdv-hero__stat-val {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+/* ── 2. Canvas CI/CD Pipeline ───────────────────────────────────────────── */
+
+.gdv-canvas-container {
+    position: relative;
+    width: 100%;
+    min-height: 240px;
+    background-color: var(--gdv-canvas-bg);
+    overflow-x: auto;
+    overflow-y: hidden;
+    cursor: grab;
+    user-select: none;
+    padding: 2.5rem 2rem 3rem;
+}
+
+.gdv-canvas-container:active {
+    cursor: grabbing;
+}
+
+.gdv-pipeline-flow {
+    display: flex;
+    align-items: flex-start;
+    min-width: max-content;
+    gap: 0;
+    transform-origin: left center;
+    transition: transform 0.15s ease-out;
+}
+
+/* ── Columna de Etapa (Stage Column / Card) ──────────────────────────────── */
+
+.gdv-stage-column {
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    border-radius: 10px;
+    min-width: 220px;
+    max-width: 270px;
+    padding: 0.85rem 0.85rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+}
+
+.gdv-stage-column__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0 0.25rem;
+}
+
+.gdv-stage-column__title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+}
+
+.gdv-stage-column__action {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2b3445;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.gdv-stage-column__action svg {
+    width: 9px !important;
+    height: 9px !important;
+}
+
+.gdv-stage-column__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+/* ── Línea Conectora entre Columnas ─────────────────────────────────────── */
+
+.gdv-pipeline-link {
+    width: 36px;
+    height: 2px;
+    background: #3b4455;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+/* ── Fila de Paso / Step (GitLab style) ─────────────────────────────────── */
+
+.gdv-pipeline-step {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.625rem;
+    padding: 0.45rem 0.625rem;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+}
+
+.gdv-pipeline-step:hover {
+    background: #283040;
+    border-color: #374357;
+}
+
+/* ── Icono de Estado (Verde si pasó, Rojo si falló, Gris por defecto) ───── */
+
+.gdv-step-status {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.gdv-step-status svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+/* Verde cuando pasó */
+.gdv-step-status--passed {
+    border: 2px solid #10b981;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.15);
+}
+
+/* Rojo cuando falló */
+.gdv-step-status--failed {
+    border: 2px solid #ef4444;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+/* Ámbar cuando degradó */
+.gdv-step-status--degraded {
+    border: 2px solid #f59e0b;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+}
+
+/* Azul cuando ejecuta */
+.gdv-step-status--running {
+    border: 2px solid #0284c7;
+    color: #0284c7;
+    background: rgba(2, 132, 199, 0.15);
+}
+
+/* Gris cuando pendiente u omitida */
+.gdv-step-status--skipped,
+.gdv-step-status--pending {
+    border: 2px solid #64748b;
+    color: #94a3b8;
+    background: transparent;
+}
+
+.gdv-step-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.gdv-step-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+}
+
+.gdv-step-sub {
+    font-size: 0.6875rem;
+    color: #94a3b8;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+.gdv-step-sub--error {
+    color: #f87171;
+    font-weight: 700;
+}
+
+/* Botón de acción a la derecha */
+.gdv-step-action {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2b3445;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.gdv-step-action svg {
+    width: 10px !important;
+    height: 10px !important;
+}
+
+.gdv-pipeline-step:hover .gdv-step-action {
+    background: #3b465c;
+    color: #f8fafc;
+}
+
+/* ── Zoom Controls ──────────────────────────────────────────────────────── */
+
+.gdv-canvas-controls {
+    position: absolute;
+    bottom: 0.875rem;
+    left: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    padding: 0.3rem 0.45rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+}
+
+.gdv-btn-ctrl {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #161a24;
+    border: 1px solid #2c3547;
+    border-radius: 0.375rem;
+    color: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.gdv-btn-ctrl:hover {
+    background: #2c3547;
+    color: #ffffff;
+}
+
+.gdv-btn-ctrl svg {
+    width: 14px !important;
+    height: 14px !important;
+    stroke: currentColor !important;
+    fill: none !important;
+}
+
+/* ── Modales Centrados (Limpio y sin fallos) ─────────────────────────────── */
+
+[x-cloak] {
+    display: none !important;
+}
+
+.gdv-modal-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.78) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    z-index: 99999999 !important;
+    display: flex;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1.5rem !important;
+    box-sizing: border-box !important;
+}
+
+.gdv-modal-card {
+    background: #161a24 !important;
+    color: #f8fafc !important;
+    border: 1px solid #2c3547 !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85) !important;
+    width: 100% !important;
+    max-width: 580px !important;
+    max-height: 88vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    animation: gdv-modal-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes gdv-modal-pop {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.gdv-modal-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #2c3547;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: #1f2533;
+}
+
+.gdv-modal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.gdv-modal-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+    color: #f8fafc;
+}
+
+.gdv-modal-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.gdv-modal-close:hover {
+    background: #2c3547;
+    color: #f8fafc;
+}
+
+.gdv-modal-body {
+    padding: 1.25rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.gdv-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.625rem;
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    padding: 0.75rem 0.875rem;
+    border-radius: 0.625rem;
+    margin: 0;
+}
+
+.gdv-info-item dt {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 0.2rem;
+}
+
+.gdv-info-item dd {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.gdv-desc-box {
+    font-size: 0.8125rem;
+    color: #cbd5e1;
+    line-height: 1.5;
+    background: #1f2533;
+    border-left: 3px solid #0284c7;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.gdv-error-alert {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    border-radius: 0.625rem;
+    padding: 0.875rem 1rem;
+    font-size: 0.8125rem;
+}
+
+.gdv-file-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    padding: 0.75rem 0.875rem;
+    border-radius: 0.625rem;
+}
+
+.gdv-file-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #f8fafc;
+}
+
+.gdv-file-meta {
+    font-size: 0.6875rem;
+    color: #94a3b8;
+    margin-top: 0.125rem;
+}
+
+.gdv-btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: #0284c7;
+    color: #ffffff !important;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.375rem;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.gdv-btn-download:hover {
+    background: #0369a1;
+}
+
+.gdv-modal-footer {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid #2c3547;
+    background: #1f2533;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.gdv-btn-close {
+    background: #2c3547;
+    color: #f8fafc;
+    border: 1px solid #3b465c;
+    padding: 0.4rem 1rem;
+    border-radius: 0.375rem;
+    font-weight: 600;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.gdv-btn-close:hover {
+    background: #3b465c;
+}
+
+.gdv-status-pill {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+}
+
+.gdv-status-pill--passed { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.gdv-status-pill--failed { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.gdv-status-pill--degraded { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.gdv-status-pill--running { background: rgba(2, 132, 199, 0.2); color: #38bdf8; }
+.gdv-status-pill--skipped,
+.gdv-status-pill--pending { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+
+.gdv-text--ok { color: #34d399 !important; }
+.gdv-text--error { color: #f87171 !important; }
+.gdv-text--warn { color: #fbbf24 !important; }
+.gdv-text--muted { color: #94a3b8 !important; }
+
+/* ── 3. Galería de Archivos Adjuntos ────────────────────────────────────── */
+
+.gdv-att-gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    width: 100%;
+}
+
+.gdv-att-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    border-radius: 0.625rem;
+}
+
+.gdv-att-toolbar__title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.gdv-btn-download-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: #059669;
+    color: #ffffff !important;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.4rem 0.875rem;
+    border-radius: 0.375rem;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.gdv-btn-download-all:hover {
+    background: #047857;
+}
+
+.gdv-att-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.875rem;
+}
+
+.gdv-att-card {
+    background: #1f2533;
+    border: 1px solid #2c3547;
+    border-radius: 0.625rem;
+    padding: 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.gdv-att-card:hover {
+    border-color: #0284c7;
+    transform: translateY(-2px);
+}
+
+.gdv-att-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.gdv-att-card__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.6875rem;
+    color: #ffffff;
+}
+
+.gdv-att-badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+}
+
+.gdv-att-badge--doctype { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.gdv-att-badge--unknown { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+
+.gdv-att-card__name {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #f8fafc;
+    word-break: break-all;
+    margin: 0;
+}
+
+.gdv-att-card__meta {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.gdv-att-card__foot {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid #2c3547;
+}
+
+.gdv-att-btn {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.3rem 0.625rem;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.gdv-att-btn--view { background: #2c3547; color: #f8fafc; }
+.gdv-att-btn--view:hover { background: #3b465c; }
+.gdv-att-btn--dl { background: #0284c7; color: #ffffff !important; }
+.gdv-att-btn--dl:hover { background: #0369a1; }
+
+.gdv-att-empty {
+    border: 1px dashed #2c3547;
+    border-radius: 0.625rem;
+    padding: 2rem;
+    text-align: center;
+    color: #94a3b8;
+    background: #1f2533;
+}
+
+.gdv-empty {
+    border: 1px dashed #2c3547;
+    border-radius: 0.875rem;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    background: #1f2533;
+}
+
+.gdv-empty__title {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--gdv-text);
+}
+
+.gdv-empty__hint {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    color: var(--gdv-muted);
+}
+
+/* ── 4. Panel de Metadatos por Etapa ────────────────────────────────────── */
+
+.gdv-metadata-panel {
+    border-top: 1px solid #2c3547;
+    background: #18202f;
+    display: flex;
+    flex-direction: column;
+}
+
+.gdv-metadata-header {
+    padding: 0.875rem 1.25rem;
+    background: #1f2533;
+    border-bottom: 1px solid #2c3547;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.gdv-metadata-header__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.gdv-metadata-count {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    background: #141a24;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #2c3547;
+}
+
+.gdv-metadata-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1rem 1.25rem;
+}
+
+.gdv-metadata-card {
+    background: #141a24;
+    border: 1px solid #283344;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gdv-metadata-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.gdv-metadata-card__left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.gdv-metadata-card__name {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.gdv-metadata-card__file {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    background: #1f2533;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid #2c3547;
+}
+
+.gdv-metadata-card__right {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.gdv-metadata-card__time {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.gdv-metadata-card__body {
+    padding-top: 0.35rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gdv-meta-tags-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.gdv-meta-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #1f2533;
+    border: 1px solid #2d384a;
+    padding: 0.2rem 0.55rem;
+    border-radius: 5px;
+    font-size: 0.75rem;
+}
+
+.gdv-meta-tag__key {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.gdv-meta-tag__val {
+    color: #38bdf8;
+    font-weight: 600;
+}
