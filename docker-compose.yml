@@ -61,15 +61,17 @@ services:
 
       # Credenciales de Google y token de OAuth.
       #
-      # Este volumen NO es opcional: `storage/private/` está en el
-      # `.dockerignore`, así que la imagen nunca lo trae, y sin él cada rebuild
-      # arranca sin credenciales y hay que volver a autorizar la cuenta a mano.
-      # En modo Testing el refresh token caduca a los ~7 días, que es exactamente
-      # la molestia que este volumen evita.
+      # Bind-mount de UNA SOLA CARPETA, no del código entero. La diferencia no es
+      # cosmética: si se montara `/var/www/html` completo, el `vendor/` del host
+      # taparía el de la imagen —que es el compilado para esta plataforma— y el
+      # arranque muere con "Failed opening required vendor/autoload.php".
       #
-      # En desarrollo lo reemplaza un bind-mount al host (ver
-      # `docker-compose.dev.yml`), para no perder el token ya autorizado.
-      - gd-private:/var/www/html/storage/private
+      # Montar solo `storage/private/` deja el código y sus dependencias en la
+      # imagen, y expone acá los tres archivos que sí tienen que persistir:
+      # `service-account.json`, `oauth-client.json` y `gmail-token.json`. Sobreviven
+      # a los rebuilds porque viven en el directorio del despliegue, no en la
+      # imagen (`storage/private/` está en el `.dockerignore`).
+      - ./admin/storage/private:/var/www/html/storage/private
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/up"]
       interval: 15s
