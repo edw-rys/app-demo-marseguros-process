@@ -1,40 +1,9 @@
 /**
- * gdv-pipeline.js — Controlador global para canvas, zoom y modales de GDV.
+ * gdv-pipeline.js — Controlador para zoom y canvas arrastrable de GDV.
  */
 (function() {
-    window.__gdvOpenModal = function(id) {
-        // Cerrar todos los modales abiertos
-        document.querySelectorAll('.gdv-modal-backdrop').forEach(function(m) {
-            m.classList.remove('is-open');
-        });
-
-        var el = document.getElementById(id);
-        if (el) {
-            // Mover al body si no está allí (evita problemas de transform: scale en el canvas)
-            if (el.parentElement !== document.body) {
-                document.body.appendChild(el);
-            }
-            el.classList.add('is-open');
-            document.body.style.overflow = 'hidden';
-        } else {
-            console.warn('[GDV] Modal no encontrado con ID:', id);
-        }
-    };
-
-    window.__gdvCloseModal = function(id) {
-        if (id) {
-            var el = document.getElementById(id);
-            if (el) el.classList.remove('is-open');
-        } else {
-            document.querySelectorAll('.gdv-modal-backdrop.is-open').forEach(function(m) {
-                m.classList.remove('is-open');
-            });
-        }
-
-        if (!document.querySelector('.gdv-modal-backdrop.is-open')) {
-            document.body.style.overflow = '';
-        }
-    };
+    // Asegurar que el scroll del body nunca quede bloqueado
+    document.body.style.overflow = '';
 
     // Zoom Controls
     window.__gdvZoomScales = window.__gdvZoomScales || {};
@@ -55,39 +24,35 @@
         wf.style.transform = 'scale(1)';
     };
 
-    // Delegación global de clics (Capture Phase: infalible ante Livewire o SVG clicks)
-    document.addEventListener('click', function(e) {
-        var openBtn = e.target.closest('[data-gdv-open]');
-        if (openBtn) {
-            var targetId = openBtn.getAttribute('data-gdv-open');
-            if (targetId) {
-                e.preventDefault();
-                e.stopPropagation();
-                window.__gdvOpenModal(targetId);
-                return;
+    // Modal helpers (para galería de adjuntos)
+    window.__gdvOpenModal = function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            if (el.parentElement !== document.body) {
+                document.body.appendChild(el);
             }
+            el.style.display = 'flex';
+            el.classList.add('is-open');
         }
+    };
 
-        var closeBtn = e.target.closest('[data-gdv-close]');
-        if (closeBtn) {
-            var closeId = closeBtn.getAttribute('data-gdv-close');
-            e.preventDefault();
-            e.stopPropagation();
-            window.__gdvCloseModal(closeId);
-            return;
-        }
-
-        if (e.target.classList && e.target.classList.contains('gdv-modal-backdrop')) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.target.classList.remove('is-open');
-            if (!document.querySelector('.gdv-modal-backdrop.is-open')) {
-                document.body.style.overflow = '';
+    window.__gdvCloseModal = function(id) {
+        if (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.style.display = 'none';
+                el.classList.remove('is-open');
             }
+        } else {
+            document.querySelectorAll('.gdv-modal-backdrop').forEach(function(m) {
+                m.style.display = 'none';
+                m.classList.remove('is-open');
+            });
         }
-    }, true);
+        document.body.style.overflow = '';
+    };
 
-    // Tecla Escape para cerrar
+    // Tecla Escape para cerrar cualquier modal abierto
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             window.__gdvCloseModal();
@@ -103,7 +68,7 @@
             var startX, scrollLeft;
 
             slider.addEventListener('mousedown', function(e) {
-                if (e.target.closest('.gdv-node-wrap') || e.target.closest('.gdv-canvas-controls') || e.target.closest('.gdv-modal-card')) return;
+                if (e.target.closest('.gdv-node-wrapper') || e.target.closest('.gdv-canvas-controls') || e.target.closest('.gdv-modal-card') || e.target.closest('a')) return;
                 isDown = true;
                 startX = e.pageX - slider.offsetLeft;
                 scrollLeft = slider.scrollLeft;

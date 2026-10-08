@@ -25,6 +25,8 @@ _EXTENSIONS_BY_KIND: dict[str, set[str]] = {
     "docx": {"docx"},
     "zip": {"zip"},
     "exe": {"exe", "dll", "bin"},
+    "heic": {"heic"},
+    "heif": {"heif"},
     # Tipos que Magic Bytes no distingue de forma fiable y se resuelven por
     # extensión en `resolve_kind`.
     "csv": {"csv"},

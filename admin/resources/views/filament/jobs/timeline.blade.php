@@ -117,6 +117,28 @@
             $hasBranching = count($lanes) > 0;
             $visibleLanes = array_slice($lanes, 0, 4, true);
 
+            // ── Documentos requeridos que NO llegaron ──────────────────────
+            //
+            // Se leen del `ValidationResult` de Fase 1, no se recalculan acá:
+            // el pipeline ya decidió qué falta (con su corredor deducido del
+            // asunto), y recalcularlo en la vista correría el riesgo de
+            // contradecirlo. Además evita duplicar la lógica de corredor.
+            $missingDocs = [];
+            $requiredDocs = [];
+
+            foreach ($email?->validationResults ?? [] as $result) {
+                if ($result->code !== 'FALTAN_DOCUMENTOS') {
+                    continue;
+                }
+
+                $missingDocs = $result->facts_json['missing'] ?? [];
+                $requiredDocs = $result->facts_json['required'] ?? [];
+
+                break;
+            }
+
+            $missingLabels = \App\Support\DocumentTypes::labels($missingDocs);
+
             $totalMs = (int) $run['total_ms'];
             $humanTotal = $totalMs < 1000
                 ? $totalMs.' ms'
@@ -198,7 +220,7 @@
 
                     <div class="gdv-hero__stat-card">
                         <span class="gdv-hero__stat-label">Ejecución</span>
-                        <span class="gdv-hero__stat-val">Corrida #{{ (int) $run['number'] }} · {{ $run['started']?->format('d/m/Y H:i') ?? '—' }}</span>
+                        <span class="gdv-hero__stat-val">Ejecución #{{ (int) $run['number'] }} · {{ $run['started']?->format('d/m/Y H:i') ?? '—' }}</span>
                     </div>
                 </div>
             </div>
@@ -223,7 +245,6 @@
                     <div class="gdv-stage-column">
                         <div class="gdv-stage-column__header">
                             <span class="gdv-stage-column__title">Recepción</span>
-                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
                         </div>
                         <div class="gdv-stage-column__body">
                             @foreach ($receptionCards as $card)
@@ -234,6 +255,7 @@
                                     'count'      => $card['count'],
                                     'executions' => $card['executions'],
                                     'attachment' => $card['attachment'],
+                                    'email'      => $email,
                                 ])
                             @endforeach
                         </div>
@@ -245,7 +267,6 @@
                     <div class="gdv-stage-column">
                         <div class="gdv-stage-column__header">
                             <span class="gdv-stage-column__title">Descarga</span>
-                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
                         </div>
                         <div class="gdv-stage-column__body">
                             @foreach ($downloadCards as $card)
@@ -256,6 +277,7 @@
                                     'count'      => $card['count'],
                                     'executions' => $card['executions'],
                                     'attachment' => $card['attachment'],
+                                    'email'      => $email,
                                 ])
                             @endforeach
                         </div>
@@ -267,7 +289,6 @@
                     <div class="gdv-stage-column">
                         <div class="gdv-stage-column__header">
                             <span class="gdv-stage-column__title">Análisis de Documentos</span>
-                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
                         </div>
                         <div class="gdv-stage-column__body">
                             @if ($hasBranching)
@@ -287,6 +308,7 @@
                                                 'count'      => $fileCard['count'],
                                                 'executions' => $fileCard['executions'],
                                                 'attachment' => $fileCard['attachment'],
+                                                'email'      => $email,
                                             ])
                                         @endforeach
                                     </div>
@@ -300,6 +322,7 @@
                                         'count'      => $card['count'],
                                         'executions' => $card['executions'],
                                         'attachment' => $card['attachment'],
+                                        'email'      => $email,
                                     ])
                                 @endforeach
                             @endif
@@ -312,7 +335,6 @@
                     <div class="gdv-stage-column">
                         <div class="gdv-stage-column__header">
                             <span class="gdv-stage-column__title">Validación</span>
-                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
                         </div>
                         <div class="gdv-stage-column__body">
                             @foreach ($validationCards as $card)
@@ -323,6 +345,7 @@
                                     'count'      => $card['count'],
                                     'executions' => $card['executions'],
                                     'attachment' => $card['attachment'],
+                                    'email'      => $email,
                                 ])
                             @endforeach
                         </div>
@@ -334,7 +357,6 @@
                     <div class="gdv-stage-column">
                         <div class="gdv-stage-column__header">
                             <span class="gdv-stage-column__title">Finalización</span>
-                            <span class="gdv-stage-column__action"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg></span>
                         </div>
                         <div class="gdv-stage-column__body">
                             @foreach ($finishCards as $card)
@@ -345,6 +367,7 @@
                                     'count'      => $card['count'],
                                     'executions' => $card['executions'],
                                     'attachment' => $card['attachment'],
+                                    'email'      => $email,
                                 ])
                             @endforeach
                         </div>
@@ -352,7 +375,39 @@
                 </div>
             </div>
 
-            {{-- ── 3. Panel de Metadatos y Datos Capturados por Etapa ── --}}
+            {{-- ── Documentos faltantes ──
+                         Va ACÁ, arriba del detalle, y no dentro de la Fase 1
+                         del grafo porque no es una etapa: es el resultado de
+                         comparar lo recibido contra lo exigido por el
+                         corredor. Es lo que contesta «¿puedo procesar esto?»,
+                         así que tiene que estar a la vista y no escondido
+                         en una sección colapsada. --}}
+                    @if ($missingDocs !== [])
+                        <div class="gdv-missing">
+                            <div class="gdv-missing__head">
+                                <span class="gdv-missing__icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+                                </span>
+                                <span class="gdv-missing__title">
+                                    Faltan {{ count($missingDocs) }}
+                                    {{ count($missingDocs) === 1 ? 'documento' : 'documentos' }}
+                                    @if ($requiredDocs !== [])
+                                        <span class="gdv-missing__of">de {{ count($requiredDocs) }} requeridos</span>
+                                    @endif
+                                </span>
+                            </div>
+
+                            <div class="gdv-missing__list">
+                                @foreach ($missingDocs as $missingDoc)
+                                    <span class="gdv-missing__chip">
+                                        {{ \App\Support\DocumentTypes::label($missingDoc) }}
+                                    </span>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- ── 3. Panel de Metadatos y Datos Capturados por Etapa ── --}}
             <div class="gdv-metadata-panel">
                 <div class="gdv-metadata-header">
                     <div class="gdv-metadata-header__title">
@@ -377,7 +432,11 @@
                             $stgDetail = $stg->detail_json ?? [];
                         @endphp
                         <div class="gdv-metadata-card">
-                            <div class="gdv-metadata-card__head">
+                            <div
+                                class="gdv-metadata-card__head"
+                                onclick="this.closest('.gdv-metadata-card').classList.toggle('is-collapsed')"
+                                title="Clic para expandir o contraer esta etapa"
+                            >
                                 <div class="gdv-metadata-card__left">
                                     <div class="gdv-step-status gdv-step-status--{{ $stgStatus }}" style="width: 20px; height: 20px;">
                                         @if ($stgStatus === 'passed')
@@ -405,6 +464,9 @@
                                     <span class="gdv-status-pill gdv-status-pill--{{ $stgStatus }}">
                                         {{ $stg->statusEnum()?->label() ?? ucfirst($stgStatus) }}
                                     </span>
+                                    <span class="gdv-metadata-card__chevron">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                                    </span>
                                 </div>
                             </div>
 
@@ -426,13 +488,37 @@
                                         @foreach ($stgDetail as $k => $v)
                                             @php
                                                 if (in_array($k, ['raw_request', 'raw_response', 'text'], true)) continue;
-                                                $formattedVal = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (is_bool($v) ? ($v ? 'Sí' : 'No') : (string) $v);
+                                                $isExpandable = is_array($v) || strlen((string)$v) > 35;
                                                 $formattedKey = ucwords(str_replace(['_', '-'], ' ', $k));
+                                                $compactValString = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (is_bool($v) ? ($v ? 'Sí' : 'No') : (string) $v);
+                                                $prettyValString = is_array($v) ? json_encode($v, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string) $v;
                                             @endphp
-                                            <div class="gdv-meta-tag">
-                                                <span class="gdv-meta-tag__key">{{ $formattedKey }}:</span>
-                                                <span class="gdv-meta-tag__val">{{ Str::limit($formattedVal, 100) }}</span>
-                                            </div>
+                                            @if ($isExpandable)
+                                                <div
+                                                    class="gdv-meta-tag gdv-meta-tag--expandable"
+                                                    onclick="this.classList.toggle('is-expanded')"
+                                                    title="Clic para expandir / comprimir"
+                                                >
+                                                    <div class="gdv-meta-tag__header-line">
+                                                        <span class="gdv-meta-tag__key">{{ $formattedKey }}:</span>
+                                                        <span class="gdv-meta-tag__val gdv-meta-tag__compact">{{ Str::limit($compactValString, 45) }}</span>
+                                                        <span class="gdv-meta-tag__expand-hint">
+                                                            <span class="gdv-hint-more">➕ Ver más</span>
+                                                            <span class="gdv-hint-less">➖ Comprimir</span>
+                                                        </span>
+                                                    </div>
+                                                    <div class="gdv-meta-expanded-content" onclick="event.stopPropagation()">
+                                                        <pre style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ $prettyValString }}</pre>
+                                                    </div>
+                                                </div>
+                                            @else
+                                                <div class="gdv-meta-tag">
+                                                    <div class="gdv-meta-tag__header-line">
+                                                        <span class="gdv-meta-tag__key">{{ $formattedKey }}:</span>
+                                                        <span class="gdv-meta-tag__val">{{ $compactValString }}</span>
+                                                    </div>
+                                                </div>
+                                            @endif
                                         @endforeach
                                     </div>
                                 @elseif (blank($stg->error) && blank($stg->message))

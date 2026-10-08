@@ -65,7 +65,7 @@ class AdminPanelTest extends TestCase
 
         $response->assertSuccessful();
         // El timeline es el entregable pedido: tiene que estar en el HTML.
-        $response->assertSee('Corrida #1');
+        $response->assertSee('Ejecución #1');
         $response->assertSee('Etapas del an');
     }
 
@@ -89,8 +89,8 @@ class AdminPanelTest extends TestCase
 
         $response->assertSuccessful();
         // Las dos corridas se ven separadas, no como una sola larga.
-        $response->assertSee('Corrida #2');
-        $response->assertSee('Corrida #1');
+        $response->assertSee('Ejecución #2');
+        $response->assertSee('Ejecución #1');
     }
 
     public function test_el_listado_de_reglas_de_tipo_arranca(): void

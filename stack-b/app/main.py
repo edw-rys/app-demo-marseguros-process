@@ -67,7 +67,7 @@ def _detect_kind(path: Path) -> tuple[str, str | None, bool]:
     if ext:
         expected = {"jpeg": "jpg", "tif": "tiff"}.get(ext, ext)
         mismatch = expected != kind and ext in {
-            "pdf", "jpg", "jpeg", "png", "xlsx", "docx", "zip", "exe",
+            "pdf", "jpg", "jpeg", "png", "xlsx", "docx", "zip", "exe", "heic", "heif",
         }
     return kind, guessed.mime, mismatch
 

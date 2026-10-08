@@ -79,3 +79,9 @@ Route::middleware(Filament\Http\Middleware\Authenticate::class)
 Route::middleware(Filament\Http\Middleware\Authenticate::class)
     ->get('jobs/{uuid}/attachments/download-all', DownloadAllAttachmentsController::class)
     ->name('jobs.attachments.download-all');
+
+use App\Http\Controllers\StageDetailController;
+
+Route::middleware(Filament\Http\Middleware\Authenticate::class)
+    ->get('jobs/{uuid}/stage/{stage_key}/{attachment_id?}', StageDetailController::class)
+    ->name('jobs.stage.show');

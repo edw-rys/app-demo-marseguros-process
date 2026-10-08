@@ -16,6 +16,9 @@
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                 </svg>
                 {{ $totalCount }} {{ $totalCount === 1 ? 'Archivo Adjunto' : 'Archivos Adjuntos' }}
+                @if ($availableDownloadsCount > 0)
+                    <span style="font-size: 0.75rem; color: #10b981; margin-left: 0.5rem;">({{ $availableDownloadsCount }} en disco)</span>
+                @endif
             </span>
         </div>
 
@@ -44,7 +47,7 @@
         <div class="gdv-att-grid">
             @foreach ($attachments as $att)
                 @php
-                    $modalId = 'gdv-att-modal-' . $att->id . '-' . uniqid();
+                    $modalId = 'gdv-att-modal-' . $att->id;
                     $ext = strtolower(pathinfo($att->filename, PATHINFO_EXTENSION));
 
                     $docType = $att->doc_type;
@@ -59,13 +62,15 @@
                     };
                 @endphp
 
-                <div x-data="{ open: false }">
+                <div class="gdv-att-card-wrapper">
                     <div
                         class="gdv-att-card"
-                        @click="open = true"
+                        data-gdv-open="{{ $modalId }}"
+                        onclick="var m = document.getElementById('{{ $modalId }}'); if(m){ if(m.parentElement !== document.body) document.body.appendChild(m); m.style.display = 'flex'; m.classList.add('is-open'); }"
                         role="button"
                         tabindex="0"
                         title="Clic para ver detalles de {{ $att->filename }}"
+                        style="cursor: pointer;"
                     >
                         <!-- Cabecera de la Tarjeta -->
                         <div class="gdv-att-card__head">
@@ -74,7 +79,7 @@
                             </div>
 
                             <span class="gdv-att-badge @if ($isUnknown) gdv-att-badge--unknown @else gdv-att-badge--doctype @endif">
-                                {{ $isUnknown ? 'Sin clasificar' : strtoupper($docType) }}
+                                {{ \App\Support\DocumentTypes::label($isUnknown ? null : $docType) }}
                             </span>
                         </div>
 
@@ -90,11 +95,12 @@
                         </div>
 
                         <!-- Botones de Acción -->
-                        <div class="gdv-att-card__foot" @click.stop>
+                        <div class="gdv-att-card__foot" onclick="event.stopPropagation()">
                             <button
                                 type="button"
                                 class="gdv-att-btn gdv-att-btn--view"
-                                @click="open = true"
+                                data-gdv-open="{{ $modalId }}"
+                                onclick="var m = document.getElementById('{{ $modalId }}'); if(m){ if(m.parentElement !== document.body) document.body.appendChild(m); m.style.display = 'flex'; m.classList.add('is-open'); }"
                             >
                                 Ver Detalle
                             </button>
@@ -103,7 +109,6 @@
                                 <a
                                     href="{{ route('attachments.download', ['uuid' => $att->uuid]) }}"
                                     class="gdv-att-btn gdv-att-btn--dl"
-                                    download
                                     title="Descargar archivo"
                                 >
                                     Descargar
@@ -112,85 +117,91 @@
                         </div>
                     </div>
 
-                    <!-- ── Modal Simple del Archivo Teleportado a Body ── -->
-                    <template x-teleport="body">
-                        <div
-                            x-show="open"
-                            x-cloak
-                            id="{{ $modalId }}"
-                            class="gdv-modal-backdrop is-open"
-                            @click.self="open = false"
-                            @keydown.escape.window="open = false"
-                        >
-                            <div class="gdv-modal-card" @click.stop>
-                                <!-- Header del Modal -->
-                                <div class="gdv-modal-header">
-                                    <div class="gdv-modal-title-wrap">
-                                        <div class="gdv-modal-icon" style="background: {{ $iconTheme['bg'] }}; color: #fff; font-weight: 800; font-size: 0.8125rem; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
-                                            {{ $iconTheme['label'] }}
-                                        </div>
-                                        <div>
-                                            <h4 class="gdv-modal-title" style="word-break: break-all;">{{ $att->filename }}</h4>
-                                            <span class="gdv-att-badge @if ($isUnknown) gdv-att-badge--unknown @else gdv-att-badge--doctype @endif" style="margin-top: 4px; display: inline-block;">
-                                                {{ $isUnknown ? 'Documento no clasificado' : strtoupper($docType) }}
-                                            </span>
+                    <!-- ── Modal Simple del Archivo Directo ── -->
+                    <div
+                        id="{{ $modalId }}"
+                        class="gdv-modal-backdrop"
+                        style="display: none;"
+                        onclick="if (event.target === this) { this.style.display = 'none'; this.classList.remove('is-open'); }"
+                    >
+                        <div class="gdv-modal-card" onclick="event.stopPropagation()">
+                            <!-- Header del Modal -->
+                            <div class="gdv-modal-header">
+                                <div class="gdv-modal-title-wrap">
+                                    <div class="gdv-modal-icon" style="background: {{ $iconTheme['bg'] }}; color: #fff; font-weight: 800; font-size: 0.8125rem; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+                                        {{ $iconTheme['label'] }}
+                                    </div>
+                                    <div>
+                                        <h4 class="gdv-modal-title" style="word-break: break-all;">{{ $att->filename }}</h4>
+                                        <span class="gdv-att-badge @if ($isUnknown) gdv-att-badge--unknown @else gdv-att-badge--doctype @endif" style="margin-top: 4px; display: inline-block;">
+                                            {{ $isUnknown ? 'Documento no clasificado' : strtoupper($docType) }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="gdv-modal-close"
+                                    data-gdv-close="{{ $modalId }}"
+                                    onclick="var m = document.getElementById('{{ $modalId }}'); if(m){ m.style.display = 'none'; m.classList.remove('is-open'); }"
+                                    title="Cerrar"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Body del Modal -->
+                            <div class="gdv-modal-body">
+                                <dl class="gdv-info-grid" style="grid-template-columns: repeat(2, 1fr);">
+                                    <div class="gdv-info-item">
+                                        <dt>Tamaño</dt>
+                                        <dd>{{ $att->sizeForHumans() }}</dd>
+                                    </div>
+                                    <div class="gdv-info-item">
+                                        <dt>Tipo de documento</dt>
+                                        <dd>{{ $att->doc_type ?: 'Desconocido' }}</dd>
+                                    </div>
+                                </dl>
+
+                                <!-- Texto extraído si existe -->
+                                @if (!empty($att->extracted_text))
+                                    <div>
+                                        <h5 style="font-size: 0.8125rem; font-weight: 700; color: #f8fafc; margin: 0 0 0.375rem;">
+                                            Contenido detectado:
+                                        </h5>
+                                        <div class="gdv-extracted-text-box" style="background: #10141d; padding: 0.75rem; border-radius: 6px; border: 1px solid #283548; font-family: monospace; font-size: 0.75rem; color: #cbd5e1; max-height: 200px; overflow-y: auto; white-space: pre-wrap;">
+                                            {{ Str::limit($att->extracted_text, 1000) }}
                                         </div>
                                     </div>
-                                    <button type="button" class="gdv-modal-close" @click="open = false" title="Cerrar (Esc)">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                    </button>
-                                </div>
+                                @endif
+                            </div>
 
-                                <!-- Body del Modal -->
-                                <div class="gdv-modal-body">
-                                    <dl class="gdv-info-grid" style="grid-template-columns: repeat(2, 1fr);">
-                                        <div class="gdv-info-item">
-                                            <dt>Tamaño</dt>
-                                            <dd>{{ $att->sizeForHumans() }}</dd>
-                                        </div>
-                                        <div class="gdv-info-item">
-                                            <dt>Tipo de documento</dt>
-                                            <dd>{{ $att->doc_type ?: 'Desconocido' }}</dd>
-                                        </div>
-                                    </dl>
+                            <!-- Footer del Modal -->
+                            <div class="gdv-modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                                @if ($att->fileExists())
+                                    <a
+                                        href="{{ route('attachments.download', ['uuid' => $att->uuid]) }}"
+                                        class="gdv-btn-download"
+                                    >
+                                        Descargar Archivo
+                                    </a>
+                                @else
+                                    <span style="font-size: 0.75rem; color: #94a3b8;">No disponible en disco</span>
+                                @endif
 
-                                    <!-- Texto extraído si existe -->
-                                    @if (!empty($att->extracted_text))
-                                        <div>
-                                            <h5 style="font-size: 0.8125rem; font-weight: 700; color: #f8fafc; margin: 0 0 0.375rem;">
-                                                Contenido detectado:
-                                            </h5>
-                                            <div class="gdv-extracted-text-box" style="background: #10141d; padding: 0.75rem; border-radius: 6px; border: 1px solid #283548; font-family: monospace; font-size: 0.75rem; color: #cbd5e1; max-height: 200px; overflow-y: auto; white-space: pre-wrap;">
-                                                {{ Str::limit($att->extracted_text, 1000) }}
-                                            </div>
-                                        </div>
-                                    @endif
-                                </div>
-
-                                <!-- Footer del Modal -->
-                                <div class="gdv-modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                                    @if ($att->fileExists())
-                                        <a
-                                            href="{{ route('attachments.download', ['uuid' => $att->uuid]) }}"
-                                            class="gdv-btn-download"
-                                            download
-                                        >
-                                            Descargar Archivo
-                                        </a>
-                                    @else
-                                        <span style="font-size: 0.75rem; color: #94a3b8;">No disponible para descarga</span>
-                                    @endif
-
-                                    <button type="button" class="gdv-btn-close" @click="open = false">
-                                        Cerrar
-                                    </button>
-                                </div>
+                                <button
+                                    type="button"
+                                    class="gdv-btn-close"
+                                    data-gdv-close="{{ $modalId }}"
+                                    onclick="var m = document.getElementById('{{ $modalId }}'); if(m){ m.style.display = 'none'; m.classList.remove('is-open'); }"
+                                >
+                                    Cerrar
+                                </button>
                             </div>
                         </div>
-                    </template>
+                    </div>
                 </div>
             @endforeach
         </div>

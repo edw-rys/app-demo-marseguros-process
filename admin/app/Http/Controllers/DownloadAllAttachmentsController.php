@@ -42,7 +42,7 @@ class DownloadAllAttachmentsController extends Controller
         }
 
         if (empty($availableFiles)) {
-            throw new NotFoundHttpException('No hay archivos adjuntos disponibles en disco para descargar.');
+            return response()->redirectToRoute('filament.admin.resources.jobs.view', ['record' => $email]);
         }
 
         $zipFilename = 'adjuntos-job-' . Str::slug($email->subject ?: $email->uuid) . '.zip';

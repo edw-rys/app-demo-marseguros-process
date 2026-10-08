@@ -11,6 +11,7 @@ use App\Models\ProcessedEmail;
 use App\Models\ValidationResult;
 use App\Services\Attachments\AttachmentDownloader;
 use App\Services\Gmail\GmailReplySender;
+use App\Support\DocumentTypes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -231,14 +232,6 @@ class EmailPipeline
                     throw new \RuntimeException($result['error'] ?? 'Fallo en detect_kind');
                 }
 
-                // El worker devuelve `error` en `data` con HTTP 200 cuando el
-                // tipo no es soportado (CU-04: un `.exe` renombrado a `.pdf`):
-                // es un resultado de negocio, no un fallo de transporte, pero
-                // para el pipeline es un fallo igual.
-                if (! empty($result['data']['error'])) {
-                    throw new \RuntimeException((string) $result['data']['error']);
-                }
-
                 return $result;
             },
             detail: [
@@ -250,7 +243,45 @@ class EmailPipeline
             attachmentId: $attachment->id,
         );
 
-        $data = $result['data'];
+        $data = $result['data'] ?? [];
+
+        // Si el worker indica un tipo no soportado o ignorado (ej. .heic, .zip, .exe, etc.):
+        // El archivo se marca como ignorado sin tumbar el correo ni lanzar error fatal.
+        if (! empty($data['error'])) {
+            $detectedKind = $data['detected_kind'] ?? strtolower(pathinfo($attachment->filename, PATHINFO_EXTENSION));
+            $attachment->forceFill([
+                'detected_kind'    => $detectedKind,
+                'doc_type'         => 'ignorado',
+                'extracted_text'   => null,
+                'processing_error' => null,
+            ])->save();
+
+            $this->recorder->mark(
+                PipelineStage::ExtractText,
+                PipelineStatus::Skipped,
+                detail: ['reason' => 'Formato de archivo ignorado', 'kind' => $detectedKind],
+                message: 'Etapa omitida: formato de archivo ignorado.',
+                attachmentId: $attachment->id,
+            );
+
+            $this->recorder->mark(
+                PipelineStage::Classify,
+                PipelineStatus::Skipped,
+                detail: ['doc_type' => 'ignorado', 'kind' => $detectedKind],
+                message: 'Etapa omitida: archivo ignorado.',
+                attachmentId: $attachment->id,
+            );
+
+            $this->recorder->mark(
+                PipelineStage::ExtractFields,
+                PipelineStatus::Skipped,
+                detail: [],
+                message: 'Etapa omitida: archivo ignorado.',
+                attachmentId: $attachment->id,
+            );
+
+            return $attachment;
+        }
 
         $attachment->forceFill($this->fieldsFromAnalysis($data))->save();
 
@@ -371,6 +402,7 @@ class EmailPipeline
 
         $summary = [
             'issues'       => [],
+            'required'     => $required,
             'missing'      => $missing,
             'unclassified' => $unclassified,
             'counts'       => $counts,
@@ -384,7 +416,10 @@ class EmailPipeline
             'severity'   => $missing ? 'error' : 'info',
             'code'       => $missing ? 'FALTAN_DOCUMENTOS' : 'DOCUMENTOS_COMPLETOS',
             'message'    => $missing
-                ? 'Faltan: '.implode(', ', $missing)
+                // Títulos, no keys: «Faltan: Solicitud, Identificación (INE)».
+                // La key sola no le dice nada a quien atiende el correo, y esta
+                // fila es lo primero que va a leer.
+                ? 'Faltan: '.implode(', ', DocumentTypes::labels($missing))
                 : 'Todos los documentos requeridos están presentes.',
             'facts_json' => $summary,
         ]);

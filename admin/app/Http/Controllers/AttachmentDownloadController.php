@@ -25,10 +25,7 @@ class AttachmentDownloadController extends Controller
         $attachment = Attachment::query()->where('uuid', $uuid)->first();
 
         if ($attachment === null || ! $attachment->fileExists()) {
-            // Mismo 404 para "no existe" y "ya se purgó del disco": distinguir
-            // los dos le diría a alguien con una URL que adivina cuáles UUID
-            // existen.
-            throw new NotFoundHttpException('El adjunto no está disponible.');
+            return response()->redirectToRoute('filament.admin.resources.jobs.view', ['record' => $attachment?->email_id ?? 1]);
         }
 
         $path = $attachment->local_path;

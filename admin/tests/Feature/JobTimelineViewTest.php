@@ -47,7 +47,7 @@ class JobTimelineViewTest extends TestCase
         $html = $this->renderFor(ProcessedEmail::factory()->create());
 
         $this->assertStringContainsString('todavía no tiene etapas', $html);
-        $this->assertStringNotContainsString('Corrida #', $html);
+        $this->assertStringNotContainsString('Ejecución #', $html);
     }
 
     public function test_dibuja_un_nodo_por_etapa_del_pipeline_en_orden(): void
@@ -189,8 +189,8 @@ class JobTimelineViewTest extends TestCase
 
         $html = $this->renderFor($email);
 
-        $this->assertStringContainsString('Corrida #2', $html);
-        $this->assertStringContainsString('Corrida #1', $html);
+        $this->assertStringContainsString('Ejecución #2', $html);
+        $this->assertStringContainsString('Ejecución #1', $html);
         $this->assertStringContainsString('última', $html);
     }
 
@@ -198,23 +198,41 @@ class JobTimelineViewTest extends TestCase
 
     private function renderFor(ProcessedEmail $email): string
     {
-        $runs = JobInfolist::runsOf($email->load('stages.attachment'));
+        $email->load(['stages.attachment', 'attachments', 'validationResults']);
+
+        $runs = JobInfolist::runsOf($email);
 
         if ($runs === []) {
-            return view('filament.jobs.timeline', ['runs' => [], 'run' => null, 'index' => 0])->render();
+            return view('filament.jobs.timeline', [
+                'email' => $email,
+                'runs'  => [],
+                'run'   => null,
+                'index' => 0,
+            ])->render();
         }
 
         $html = '<div class="space-y-4">';
 
         foreach ($runs as $index => $run) {
             $html .= view('filament.jobs.timeline', [
+                'email' => $email,
                 'runs'  => $runs,
                 'run'   => $run,
                 'index' => $index,
             ])->render();
         }
 
-        return $html.'</div>';
+        // La vista lleva el CSS inline. Los asserts de este test cuentan
+        // CLASES en el markup (`.gdv-lane`, `gdv-node--failed`), y las
+        // definiciones dentro del `<style>` contienen los mismos nombres: sin
+        // sacarlo, `substr_count` cuenta cada selector y las cuentas dan el
+        // doble o el triple.
+        return $this->withoutStyle($html.'</div>');
+    }
+
+    private function withoutStyle(string $html): string
+    {
+        return preg_replace('#<style\b[^>]*>.*?</style>#si', '', $html) ?? $html;
     }
 
     private function stage(

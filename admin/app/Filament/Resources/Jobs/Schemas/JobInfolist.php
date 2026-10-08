@@ -7,6 +7,7 @@ use App\Models\Attachment;
 use App\Models\ProcessedEmail;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -61,11 +62,10 @@ class JobInfolist
                     ->description(
                         'Cada nodo es una etapa del pipeline. Clic en un nodo para ver qué hace y descargar el archivo.'
                     )->schema([
-                    TextEntry::make('timeline')
+                    ViewEntry::make('timeline')
                         ->hiddenLabel()
                         ->columnSpanFull()
-                        ->html()
-                        ->state(fn (ProcessedEmail $record): string => self::timelineHtml($record)),
+                        ->view('filament.jobs.timeline-wrapper'),
 
                     TextEntry::make('live')
                         ->hiddenLabel()
@@ -171,14 +171,10 @@ class JobInfolist
         return Section::make('Adjuntos')
             ->description('Archivos detectados, clasificados y extraídos. Clic en cualquier archivo para ver su detalle completo.')
             ->schema([
-                TextEntry::make('attachments_gallery')
+                ViewEntry::make('attachments_gallery')
                     ->hiddenLabel()
                     ->columnSpanFull()
-                    ->html()
-                    ->state(fn (ProcessedEmail $record): string => view('filament.jobs.attachments-gallery', [
-                        'email'       => $record,
-                        'attachments' => $record->attachments()->get(),
-                    ])->render()),
+                    ->view('filament.jobs.attachments-wrapper'),
             ]);
     }
 
