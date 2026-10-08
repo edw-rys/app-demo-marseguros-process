@@ -427,7 +427,7 @@ class EmailPipeline
         if ($missing) {
             $summary['issues'][] = [
                 'code'    => 'FALTAN_DOCUMENTOS',
-                'message' => 'Falta adjuntar: '.implode(', ', $missing).'.',
+                'message' => 'Falta adjuntar: '.implode(', ', DocumentTypes::labels($missing)).'.',
             ];
         }
 
@@ -579,13 +579,17 @@ class EmailPipeline
         if ($template === 'validated' || $template === 'missing') {
             // RF-09: estos dos casos NO llaman al LLM — un template fijo basta
             // y ahorra tokens (CU-02).
+            //
+            // `{detalle}` se arma con títulos, no con keys: es el cuerpo del
+            // correo que va a leer la persona que mandó los adjuntos, y
+            // «solicitud, ine» no le sirve de nada.
             $body = $template === 'validated'
                 ? (string) config('gmail_docs.reply.validated')
                 : str_replace(
                     '{detalle}',
                     implode("\n", array_map(
-                        fn (string $doc) => '  - '.$doc,
-                        $missing,
+                        fn (string $label) => '  - '.$label,
+                        DocumentTypes::labels($missing),
                     )),
                     (string) config('gmail_docs.reply.missing'),
                 );

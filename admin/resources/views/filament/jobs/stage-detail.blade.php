@@ -298,7 +298,7 @@
                     <div>
                         <div style="font-weight: 700; color: #f8fafc; font-size: 0.9375rem;">{{ $attachment->filename }}</div>
                         <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem;">
-                            {{ $attachment->sizeForHumans() }} · Tipo: <strong>{{ strtoupper($attachment->doc_type ?: 'Sin clasificar') }}</strong>
+                            {{ $attachment->sizeForHumans() }} · Tipo: <strong>{{ \App\Support\DocumentTypes::label($attachment->doc_type) }}</strong>
                         </div>
                     </div>
                     @if ($attachment->fileExists())

@@ -161,7 +161,7 @@
                                     </div>
                                     <div class="gdv-info-item">
                                         <dt>Tipo de documento</dt>
-                                        <dd>{{ $att->doc_type ?: 'Desconocido' }}</dd>
+                                        <dd>{{ \App\Support\DocumentTypes::label($att->doc_type) }}</dd>
                                     </div>
                                 </dl>
 
