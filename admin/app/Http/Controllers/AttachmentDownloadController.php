@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attachment;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -20,7 +21,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class AttachmentDownloadController extends Controller
 {
-    public function __invoke(Request $request, string $uuid): StreamedResponse
+    public function __invoke(Request $request, string $uuid): Response
     {
         $attachment = Attachment::query()->where('uuid', $uuid)->first();
 

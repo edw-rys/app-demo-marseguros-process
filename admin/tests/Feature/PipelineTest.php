@@ -228,11 +228,14 @@ class PipelineTest extends TestCase
         // Fase 2 nunca corrió: no tiene sentido validar lo que no llegó.
         $this->assertSame(0, JobStage::query()->where('stage_key', 'phase2_validate')->count());
 
-        // La respuesta pide lo que falta, nombrándolo (RF-09).
+        // La respuesta pide lo que falta, nombrándolo (RF-09). Con títulos, no con
+        // keys: este texto lo lee la persona que mandó los adjuntos, y «ine» no
+        // le dice qué traer.
         $response = EmailResponse::query()->sole();
         $this->assertSame('missing', $response->template);
-        $this->assertStringContainsString('ine', $response->body);
-        $this->assertStringContainsString('comprobante_domicilio', $response->body);
+        $this->assertStringContainsString('Cédula de identidad', $response->body);
+        $this->assertStringContainsString('Comprobante de domicilio', $response->body);
+        $this->assertStringNotContainsString('comprobante_domicilio', $response->body);
 
         // Y el faltante queda registrado con su código.
         $result1 = ValidationResult::query()->where('rule_name', 'fase1_poliza_nueva')->sole();
@@ -242,10 +245,12 @@ class PipelineTest extends TestCase
 
     // ── CU-04: ejecutable renombrado ────────────────────────────────────────
 
-    public function test_ejecutable_renombrado_falla_en_detect_kind_y_corta_el_pipeline(): void
+    public function test_un_tipo_no_soportado_se_ignora_sin_tumbar_el_correo(): void
     {
         // El worker responde 200 pero con `error`: es un resultado de negocio,
-        // no un fallo de transporte (un `.exe` no es un PDF válido).
+        // no un fallo de transporte (un `.exe` no es un PDF válido). No es lo
+        // mismo que el worker caído, así que no puede cortarse el pipeline:
+        // el resto de los adjuntos del correo tiene que seguir su curso.
         $this->fakeWorkers([
             'A /analyze' => [
                 'detected_kind'      => 'exe',
@@ -262,16 +267,19 @@ class PipelineTest extends TestCase
 
         $result = app(EmailPipeline::class, ['email' => $email])->run();
 
-        // Un adjunto ilegible deja el job con errores, no validado.
-        $this->assertSame(ProcessedEmail::STATUS_FAILED, $result->status);
+        // El adjunto se aparta como `ignorado` en vez de contarlo como
+        // documento: si no, un `.exe` renombrado a `factura.pdf` aprobaría la
+        // Fase 1 por cushonear el conteo.
+        $this->assertSame('ignorado', $email->attachments()->sole()->doc_type);
 
-        // `detect_kind` queda registrado como fallido CON el motivo.
-        $detect = JobStage::query()->where('stage_key', 'detect_kind')->sole();
-        $this->assertSame('failed', $detect->status);
-        $this->assertStringContainsString('no es un PDF válido', (string) $detect->error);
+        // Y como no hay factura, el correo queda esperando el reenvío.
+        $this->assertSame(ProcessedEmail::STATUS_PENDING, $result->status);
 
-        // Y las etapas por adjunto que no salieron de `detect_kind` quedan
-        // `skipped`, no ausentes: el admin muestra qué no llegó a ejecutarse.
+        // `detect_kind` sí corrió — el worker respondió — y las etapas que no
+        // tienen sentido sobre un archivo ignorado quedan `skipped`, no
+        // ausentes: el admin muestra qué no llegó a ejecutarse.
+        $this->assertSame('passed', JobStage::query()->where('stage_key', 'detect_kind')->sole()->status);
+
         foreach (['extract_text', 'classify', 'extract_fields'] as $key) {
             $this->assertSame(
                 'skipped',
@@ -280,7 +288,7 @@ class PipelineTest extends TestCase
             );
         }
 
-        // El correo NO se da por bueno: sin documentos analizables hay un issue.
+        // Fase 2 nunca corrió: no hay nada que validar.
         $this->assertSame(0, JobStage::query()->where('stage_key', 'phase2_validate')->count());
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ProcessedEmail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use ZipArchive;
@@ -14,7 +15,7 @@ use ZipArchive;
  */
 class DownloadAllAttachmentsController extends Controller
 {
-    public function __invoke(Request $request, string $uuid): StreamedResponse
+    public function __invoke(Request $request, string $uuid): Response
     {
         $email = ProcessedEmail::query()->where('uuid', $uuid)->first();
 

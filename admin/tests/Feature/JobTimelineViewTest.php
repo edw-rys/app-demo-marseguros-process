@@ -205,7 +205,7 @@ class JobTimelineViewTest extends TestCase
         $this->assertStringContainsString('de 4 requeridos', $html);
 
         $this->assertSame(
-            ['Solicitud', 'Identificación (INE)'],
+            ['Solicitud', 'Cédula de identidad'],
             $this->missingChips($html),
             'los faltantes se muestran como títulos, no como keys de config',
         );
@@ -232,12 +232,12 @@ class JobTimelineViewTest extends TestCase
         $runs = JobInfolist::runsOf($email);
 
         if ($runs === []) {
-            return view('filament.jobs.timeline', [
+            return $this->withoutStyle(view('filament.jobs.timeline', [
                 'email' => $email,
                 'runs'  => [],
                 'run'   => null,
                 'index' => 0,
-            ])->render();
+            ])->render());
         }
 
         $html = '<div class="space-y-4">';
