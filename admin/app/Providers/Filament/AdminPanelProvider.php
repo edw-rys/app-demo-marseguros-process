@@ -10,6 +10,7 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Assets\Css;
+use Filament\View\PanelsRenderHook;
 use Filament\Support\Assets\Js;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
@@ -39,20 +40,32 @@ class AdminPanelProvider extends PanelProvider
                 // #038fac — el teal de Marseguros (CLAUDE.md §15).
                 'primary' => Color::hex('#038fac'),
             ])
-            // CSS del proyecto (Tailwind compilado por Vite) como asset
-            // ADICIONAL. No se usa `viteTheme()` a propósito: ese método
-            // REEMPLAZA el theme por defecto, y el theme por defecto es lo que
-            // sirve `/css/filament/filament/app.css` — o sea, todo el CSS de
-            // Filament. Con `viteTheme()` el panel abre sin una sola hoja de
-            // estilo y se ve como texto pelado.
+            // CSS del proyecto (Tailwind compilado por Vite).
             //
-            // `Vite` resuelve solo: usa `public/hot` si el server de Vite está
-            // levantado, y `public/build/manifest.json` si no. Por eso no hay
-            // ningún nombre de archivo con hash hardcodeado acá.
+            // NO va por `->assets([...])`, y NO se usa `viteTheme()`:
+            //
+            //  · `viteTheme()` REEMPLAZA el theme por defecto, y ese theme es
+            //    el que sirve `/css/filament/filament/app.css` — todo el CSS
+            //    de Filament. Con él el panel abre sin una hoja de estilo.
+            //  · `Css::make('x')->html(...)` sin `path` rompe el build de la
+            //    imagen: `php artisan filament:assets` (que corre en el
+            //    `post-autoload-cmd` del Dockerfile) itera los assets de estilo
+            //    y llama `copyAsset($asset->getPath(), …)`. Con `path` en null
+            //    eso es un TypeError y el build muere con
+            //    "Argument #1 ($from) must be of type string, null given".
+            //
+            // Por eso va por un render hook, que solo emite la etiqueta y no
+            // toca el registro de assets. `Vite` resuelve solo: usa
+            // `public/hot` si el server está levantado, y
+            // `public/build/manifest.json` si no — por eso no hay ningún
+            // nombre con hash escrito acá.
+            ->renderHook(
+                PanelsRenderHook::STYLES_AFTER,
+                fn (): Htmlable => app(Vite::class)('resources/css/app.css'),
+            )
             ->assets([
                 Css::make('gdv-pipeline', asset('css/gdv-pipeline.css')),
                 Js::make('gdv-pipeline', asset('js/gdv-pipeline.js')),
-                Css::make('app-css')->html(fn (): Htmlable => app(Vite::class)('resources/css/app.css')),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
