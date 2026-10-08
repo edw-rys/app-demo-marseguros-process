@@ -94,7 +94,8 @@ RUN composer install \
         --no-interaction \
         --prefer-dist \
         --optimize-autoloader \
-        --no-progress
+        --no-progress \
+    && test -f vendor/autoload.php
 
 COPY --chown=www-data:www-data . .
 
@@ -103,6 +104,26 @@ COPY --chown=www-data:www-data . .
 # `artisan` exista.
 RUN composer run-script post-autoload-cmd \
     || composer dump-autoload --no-dev --optimize
+
+# Última puerta antes de dar la imagen por buena.
+#
+# Sin esto, una imagen sin `vendor` llega a `init.sh`, que revienta con un
+# "Failed opening required vendor/autoload.php" y un mensaje que culpa a
+# `DB_DATABASE` — nada que ver con las dependencias. El síntoma aparece en
+# runtime, en el arranque del contenedor, y el build aparece como exitoso.
+#
+# Fallar acá es la diferencia entre un `docker compose build` que dice qué pasa
+# y un contenedor en crash-loop con un error que no señala su causa. Las dos
+# capas se necesitan: la de arriba cubre que `composer install` no dejara nada,
+# y esta cubre que el `COPY . .` de abajo no lo haya pisado.
+RUN test -f vendor/autoload.php \
+    || (echo "" \
+        && echo "ERROR: la imagen no tiene vendor/autoload.php." \
+        && echo "       'composer install' terminó sin dejar vendor/." \
+        && echo "       Causa habitual: una capa de composerInstall quedó CACHED" \
+        && echo "       de un build anterior. Reconstruí con:" \
+        && echo "           docker compose build admin --no-cache" \
+        && exit 1)
 
 WORKDIR $APP_ROOT
 

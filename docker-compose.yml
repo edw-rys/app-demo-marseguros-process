@@ -58,16 +58,18 @@ services:
       # `admin/database/.gitignore` trae `*.sqlite*`, así que nunca se sube al repo.
       - ./admin/database:/var/www/gmail-docs/db
       - gd-attachments:/var/www/gmail-docs/attachments
-      # Solo para editar el código desde el host. En un despliegue de verdad se
-      # quita: la imagen ya trae el código.
+
+      # Credenciales de Google y token de OAuth.
       #
-      # Ojo al quitarlo: storage/private/ quedaría dentro de la capa de imagen y
-      # se perdería en cada rebuild. Ahí hay que agregar su propio volumen
-      # (`- gd-private:/var/www/html/storage/private`), porque ahí viven el JSON
-      # de la service account, el del cliente OAuth y el refresh token — que en
-      # modo Testing caduca a los ~7 días y no se puede volver a obtener sin
-      # volver a autorizar la cuenta a mano.
-      - ./admin:/var/www/html
+      # Este volumen NO es opcional: `storage/private/` está en el
+      # `.dockerignore`, así que la imagen nunca lo trae, y sin él cada rebuild
+      # arranca sin credenciales y hay que volver a autorizar la cuenta a mano.
+      # En modo Testing el refresh token caduca a los ~7 días, que es exactamente
+      # la molestia que este volumen evita.
+      #
+      # En desarrollo lo reemplaza un bind-mount al host (ver
+      # `docker-compose.dev.yml`), para no perder el token ya autorizado.
+      - gd-private:/var/www/html/storage/private
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/up"]
       interval: 15s
@@ -144,3 +146,6 @@ services:
 # de anteponer siempre `storage/app`.
 volumes:
   gd-attachments:
+  # Credenciales de Google y token de OAuth. Sobrevive a los rebuilds, que es
+  # justo lo que no hace el código dentro de la imagen.
+  gd-private:

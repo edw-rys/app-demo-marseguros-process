@@ -15,6 +15,44 @@ echo "[INIT] Gmail Docs Validator · admin"
 
 cd "$APP_ROOT"
 
+# ── Dependencias de PHP ──────────────────────────────────────────────────────
+# Va PRIMERO, antes de tocar nada, porque sin `vendor/` TODO lo que sigue falla
+# con el mismo error de PHP y el mismo mensaje: "Failed opening required
+# vendor/autoload.php". Correr migraciones para descubrir después que el
+# problema eran las dependencias solo hace que el mensaje que ve el operador
+# hable de `DB_DATABASE` y los permisos del volumen, que no tienen nada que ver.
+if [ ! -f "$APP_ROOT/vendor/autoload.php" ]; then
+    echo "[INIT] ERROR: no existe $APP_ROOT/vendor/autoload.php."
+
+    # La causa más común NO es una imagen rota: es un bind-mount del código que
+    # tapó el `vendor` que la imagen sí traía. `vendor/` está en el `.dockerignore`
+    # justamente para que no viaje desde el host, así que un checkout de prod sin
+    # `composer install` encima del mount deja el directorio sin dependencias.
+    #
+    # Se detecta mirando `/proc/mounts`, que es el único lugar que dice la verdad
+    # sobre qué está montado: `ls` de un directorio no lo revela.
+    #
+    # La comparación es por campo exacto con awk, no con grep: un patrón de
+    # coincidencia sobre la línea entera haría que `/` matcheara `//` y que
+    # `/var/www` matcheara `/var/www/html`. Con awk, campo 2 es el punto de
+    # montaje y se compara con `==`.
+    if awk -v p="$APP_ROOT" '$2 == p { f = 1 } END { exit !f }' /proc/mounts 2>/dev/null; then
+        echo "[INIT]        Y $APP_ROOT ESTÁ MONTADO desde el host, así que el"
+        echo "[INIT]        vendor de la imagen quedó tapado."
+        echo "[INIT]        Opciones:"
+        echo "[INIT]          a) Correr 'composer install --no-dev' en el host, o"
+        echo "[INIT]          b) Sacar el bind-mount del código en el despliegue."
+        echo "[INIT]        (La opción b es la recomendada: el .dockerignore"
+        echo "[INIT]         excluye vendor/ a propósito, porque el del host está"
+        echo "[INIT]         compilado para otra plataforma.)"
+    else
+        echo "[INIT]        No hay mount sobre $APP_ROOT, así que la imagen se"
+        echo "[INIT]        construyó sin dependencias. Reconstruila:"
+        echo "[INIT]            docker compose build admin --no-cache"
+    fi
+    exit 1
+fi
+
 # ── Carpetas de storage ─────────────────────────────────────────────────────
 # Laravel necesita que estas ocho existan, y varias tienen `.gitignore` dentro
 # (por eso git nunca las trae): si falta cualquiera, cualquier artisan falla.
@@ -64,7 +102,10 @@ fi
 if [ "${AUTO_MIGRATE:-true}" = "true" ]; then
     echo "[INIT] Migraciones…"
     php artisan migrate --force --no-interaction || {
-        echo "[INIT] ERROR: fallaron las migraciones. Revisa DB_DATABASE y los permisos del volumen."
+        echo "[INIT] ERROR: fallaron las migraciones."
+        echo "[INIT]        Causa habitual: DB_DATABASE apunta a una ruta que no"
+        echo "[INIT]        existe o no es escribible por www-data."
+        echo "[INIT]        El error de arriba dice cuál es."
         exit 1
     }
 fi

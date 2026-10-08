@@ -1,0 +1,28 @@
+# Overrides SOLO de desarrollo.
+#
+# No se llama `docker-compose.override.yml` a propósito: ese nombre lo carga
+# Compose automáticamente, y que un despliegue de producción pudiera terminar
+# usando este archivo por accidente es exactamente el bug que este proyecto
+# ya se comió una vez (el bind-mount del código tapando el `vendor` de la
+# imagen). Con el nombre `dev`, cargar el archivo hay que pedirlo explícito.
+#
+# Uso:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# O lo que ya hace el `make up` / `make build` del Makefile.
+
+services:
+
+  admin:
+    volumes:
+      # Editar código desde el host sin rebuild. Solo acorta el ciclo de
+      # desarrollo; en producción el código va en la imagen.
+      #
+      # El `vendor/` del host tiene que existir (composer install). El
+      # `.dockerignore` lo excluye del build justamente porque el del host
+      # puede estar compilado para otra plataforma, así que acá corre el del
+      # host. Si no lo tenés, el arranque falla con un mensaje que lo dice.
+      - ./admin:/var/www/html
+
+      # El volumen `gd-private` del compose base se reemplaza por el
+      # directorio real del host: así se conserva el refresh token ya
+      # autorizado en vez de empezar de cero con un volumen vacío.
+      - ./admin/storage/private:/var/www/html/storage/private
