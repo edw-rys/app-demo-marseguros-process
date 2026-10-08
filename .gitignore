@@ -1,0 +1,64 @@
+# ── Secretos ────────────────────────────────────────────────────────────────
+# Los `.env` NO se commitean; los `.env.example` sí.
+.env
+.env.backup
+.env.production
+.env.local
+
+# El JSON de la service account de Google. Vive en `admin/storage/private/` y
+# solo se referencia desde `GOOGLE_SERVICE_ACCOUNT_PATH`. Este es el archivo con
+# más daño posible si se filtra: da acceso a Gmail.
+admin/storage/private/
+**/service-account.json
+google-credentials*.json
+
+# ── Base de datos ───────────────────────────────────────────────────────────
+# La SQLite es un artefacto local: cada quien genera la suya con
+# `php artisan migrate`.
+admin/database/*.sqlite
+admin/database/*.sqlite-journal
+admin/database/*.sqlite-shm
+admin/database/*.sqlite-wal
+
+# ── Laravel ─────────────────────────────────────────────────────────────────
+admin/vendor/
+admin/node_modules/
+admin/public/build/
+admin/public/hot/
+admin/public/storage/
+admin/storage/*.key
+admin/storage/app/*
+!admin/storage/app/.gitignore
+admin/storage/app/public/*
+!admin/storage/app/public/.gitignore
+admin/storage/framework/cache/*
+admin/storage/framework/sessions/*
+admin/storage/framework/testing/*
+admin/storage/framework/views/*
+admin/storage/logs/*
+admin/bootstrap/cache/*.php
+admin/.phpunit.result.cache
+admin/.phpunit.cache
+
+# ── Python ──────────────────────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── Docker ──────────────────────────────────────────────────────────────────
+# Los volúmenes ya son ignorados por Docker; esto es solo para que no aparezcan
+# archivos sueltos si alguien levanta algo con bind mounts.
+docker-data/
+
+# ── Sistema y editores ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.zed/
+*.swp

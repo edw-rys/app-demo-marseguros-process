@@ -1,0 +1,50 @@
+# Lo que no debe entrar en el contexto de build.
+#
+# Regla práctica: si un archivo está acá, el contenedor no lo necesita para
+# arrancar. Si lo sacas y algo falla, es porque faltaba de verdad.
+
+# Secretos. El `.env` se inyecta en runtime con `env_file`; si estuviera en la
+# imagen, quedaría en una capa del registry para siempre.
+.env
+.env.*
+!.env.example
+
+# La credencial de Google nunca se copia.
+storage/private/
+**/service-account.json
+
+# Dependencias: se reinstalan dentro de la imagen con la extensión de PHP
+# correcta. Copiar el `vendor` del host (compilado para otra plataforma) rompe
+# las extensiones binarias.
+vendor/
+node_modules/
+
+# Datos locales: la imagen no debe llevar la base ni los adjuntos de quien la
+# construyó.
+database/*.sqlite
+database/*.sqlite-*
+storage/app/*
+storage/logs/*
+bootstrap/cache/*.php
+
+# Ruido de desarrollo.
+.git
+.gitignore
+.github/
+.phpunit.result.cache
+.phpunit.cache
+tests/
+phpunit.xml
+README.md
+CLAUDE.md
+AGENTS.md
+.vscode/
+.idea/
+*.md
+*.log
+
+# Los archivos de Docker tampoco se necesitan dentro del contexto: el build ya
+# los usó.
+Dockerfile
+.dockerignore
+docker-compose*.yml

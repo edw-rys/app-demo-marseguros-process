@@ -1,0 +1,30 @@
+# El `.env` se inyecta en runtime con `env_file`: si estuviera en la imagen,
+# la API key de OpenRouter quedaría en una capa del registry para siempre.
+.env
+.env.*
+!.env.example
+
+# El venv del host está compilado para el Python del host; dentro se
+# reinstalan las dependencias.
+.venv/
+venv/
+
+# Los tests no van en la imagen de producción.
+tests/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Ruido.
+.git
+.gitignore
+README.md
+CLAUDE.md
+.vscode/
+.idea/
+*.md
+*.log
+
+Dockerfile
+.dockerignore
+docker-compose*.yml

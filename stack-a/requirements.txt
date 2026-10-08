@@ -1,0 +1,44 @@
+# Stack A — OCR local + motor de reglas JSON
+# Python 3.13 (paddlepaddle no publica wheel cp314; 3.13 sí tiene wheel nativo arm64)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+# 2.11.10, no 2.10.6: `python-rule-engine==1.0.0` declara `pydantic>=2.10.6` PERO
+# además `pydantic-core>=2.29.0`, y `pydantic==2.10.6` fija su core a `==2.27.2`
+# exacto. Los dos pins son incompatibles y el `pip install` falla entero con
+# ResolutionImpossible. Ojo que el mensaje de pip señala a pydantic-core, que no
+# está en este archivo: el culpable real es el pin de pydantic.
+# 2.11.10 ya trae core 2.33.2 y satisface ambos.
+pydantic==2.11.10
+pydantic-settings==2.7.0
+httpx==0.28.1
+python-multipart==0.0.20
+
+# Extracción de texto
+filetype==1.2.0
+pdfplumber==0.11.4
+python-docx==1.1.2
+openpyxl==3.1.5
+pillow==11.0.0
+pdf2image==1.17.0
+
+# OCR tier 1
+pytesseract==0.3.13
+
+# Motor de reglas JSON.
+# NOTA: 'json-rules-engine' NO existe en PyPI (es una librería JS/TS de CacheControl).
+# python-rule-engine es el port Python y usa la misma sintaxis JSON de reglas.
+python-rule-engine==1.0.0
+
+# OCR tier 2 — fallback cuando Tesseract confidence < OCR_FALLBACK_THRESHOLD.
+# NO va aquí a propósito: paddlepaddle son ~1.5 GB y no publica wheel para todas
+# las plataformas, así que si su instalación falla se cae también Tesseract, que
+# sí funciona y es el OCR principal (RF-04).
+#
+# Se instala aparte, y es opcional de verdad:
+#   pip install -r requirements-ocr2.txt
+#
+# `app/extract/ocr.py` lo importa de forma lazy: si no está, degrada a
+# "solo Tesseract" con un warning en vez de reventar.
+
+# Tests
+pytest==8.3.4

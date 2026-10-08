@@ -1,0 +1,18 @@
+# OCR tier 2 — PaddleOCR (opcional).
+#
+# Solo hace falta si `OCR_FALLBACK_THRESHOLD` se dispara seguido: cuando
+# Tesseract devuelve una confianza media menor al umbral, el pipeline reintenta
+# con PaddleOCR, que reconoce mejor los escaneados torcidos y con sello (RF-04).
+#
+#   pip install -r requirements-ocr2.txt
+#
+# Aviso sobre la versión de paddlepaddle: 3.3.1 NO existe en PyPI (la última
+# publicada al escribir esto es 3.2.2). Pinned a la que sí existe.
+#
+# Y ojo con la plataforma: no hay wheel para todas. En Apple Silicon sobre
+# Linux (Docker arm64) sí hay; sobre macOS nativo, no, y por eso el venv local
+# de stack-a no se puede construir con esto dentro — el servicio funciona igual,
+# pero solo con Tesseract.
+
+paddlepaddle==3.2.2
+paddleocr==3.7.0

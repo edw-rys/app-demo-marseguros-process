@@ -1,0 +1,19 @@
+# Stack B — OpenRouter + Gemini Flash Lite
+# Python 3.13 (mismo criterio que stack-a; este servicio no usa paddle pero se mantiene la versión)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+httpx==0.28.1
+python-multipart==0.0.20
+
+# Detección de magic bytes y pre-extracción de texto para XLSX/DOCX/CSV
+# (PDF e imagen van binarios al LLM, no se pre-extraen — RF-04)
+filetype==1.2.0
+pdfplumber==0.11.4
+python-docx==1.1.2
+openpyxl==3.1.5
+
+# Tests
+pytest==8.3.4
+respx==0.22.0

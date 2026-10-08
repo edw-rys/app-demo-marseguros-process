@@ -1,0 +1,146 @@
+# Gmail Docs Validator — los tres procesos del demo.
+#
+#   admin    Laravel 13 + Filament 5  →  http://localhost:8000/admin
+#   stack-a  FastAPI · OCR local      →  http://localhost:8010
+#   stack-b  FastAPI · OpenRouter     →  http://localhost:8011
+#
+# Los `.env` de cada servicio se leen de su propia carpeta (ver `env_file`).
+# Este archivo solo pone lo que DOCKER necesita y no puede saber el servicio:
+# la red interna, los puertos del host y las rutas compartidas.
+#
+# Arranque:  cp .env.example .env && docker compose up -d --build
+# El `.env` de la raíz NO lleva claves de Google ni de OpenRouter: esas viven
+# en `admin/.env` y `stack-b/.env`, que están en el .gitignore.
+
+services:
+
+  # ── Orquestador + admin ────────────────────────────────────────────────────
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: gdv-admin
+    restart: unless-stopped
+    depends_on:
+      stack-a:
+        condition: service_healthy
+      stack-b:
+        condition: service_healthy
+    ports:
+      - "${ADMIN_PORT:-8000}:8080"
+    env_file:
+      - ./admin/.env
+    environment:
+      # Laravel corre DENTRO de la red de Docker: los workers se llaman por
+      # nombre de servicio, no por 127.0.0.1 (que dentro del contenedor es el
+      # propio admin). Estas líneas pisan lo que haya en admin/.env.
+      STACK_A_URL: "http://stack-a:8010"
+      STACK_B_URL: "http://stack-b:8011"
+
+      # La BD en un bind mount al archivo del repo (`admin/database/`), no en un
+      # volumen nombrado: así el `.sqlite` vive en el host, se abre con `sqlite3`
+      # desde la máquina para respaldarlo o mirarlo, y no se pierde con
+      # `docker compose down -v`. La ruta del mount es RELATIVA al compose, así
+      # que funciona igual en despliegue, donde el bind-mount del código (abajo)
+      # sí se quita y queda solo este.
+      #
+      # Se monta la CARPETA, no el archivo: bind-mountear un archivo que todavía
+      # no existe hace que Docker lo cree como DIRECTORIO, y entonces Laravel
+      # recibe "unable to open database file".
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/www/gmail-docs/db/database.sqlite
+
+      # Ruta ABSOLUTA del volumen compartido de adjuntos (ver más abajo).
+      ATTACHMENTS_ROOT: /var/www/gmail-docs/attachments
+      DEMO_INBOX_PATH: /var/www/gmail-docs/attachments/demo-inbox
+    volumes:
+      # El .sqlite del host: es el mismo archivo que `admin/database/database.sqlite`.
+      # `admin/database/.gitignore` trae `*.sqlite*`, así que nunca se sube al repo.
+      - ./admin/database:/var/www/gmail-docs/db
+      - gd-attachments:/var/www/gmail-docs/attachments
+      # Solo para editar el código desde el host. En un despliegue de verdad se
+      # quita: la imagen ya trae el código.
+      #
+      # Ojo al quitarlo: storage/private/ quedaría dentro de la capa de imagen y
+      # se perdería en cada rebuild. Ahí hay que agregar su propio volumen
+      # (`- gd-private:/var/www/html/storage/private`), porque ahí viven el JSON
+      # de la service account, el del cliente OAuth y el refresh token — que en
+      # modo Testing caduca a los ~7 días y no se puede volver a obtener sin
+      # volver a autorizar la cuenta a mano.
+      - ./admin:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ── Stack A · OCR local + reglas JSON ──────────────────────────────────────
+  stack-a:
+    build:
+      context: ./stack-a
+      dockerfile: Dockerfile
+      args:
+        # PaddleOCR son 864 MB de la imagen de 1,9 GB. Es un OCR de segundo
+        # nivel, opcional: solo se usa cuando Tesseract devuelve una confianza
+        # menor a `OCR_FALLBACK_THRESHOLD`, y el worker degrada a "solo
+        # Tesseract" con un warning si la librería no está.
+        #
+        # Va apagado por default porque el costo no es el de compilarlo una vez,
+        # sino el de arrastrarlo en CADA build: con el builder de tipo
+        # `docker-container` la imagen entera se re-exporta como tarball, así que
+        # estos 864 MB se pagan en cada `up --build`.
+        #
+        # Para activarlo: INSTALL_OCR2=true make build
+        INSTALL_OCR2: ${INSTALL_OCR2:-false}
+    container_name: gdv-stack-a
+    restart: unless-stopped
+    ports:
+      - "${STACK_A_PORT:-8010}:8010"
+    env_file:
+      - ./stack-a/.env
+    environment:
+      # DENTRO de la imagen los binarios están en /usr/bin, no en Homebrew.
+      TESSERACT_CMD: /usr/bin/tesseract
+      PDFTOPPM_CMD: /usr/bin/pdftoppm
+      # Los .eml de ejemplo que genera `demo:make-eml`.
+      TEXT_DUMP_DIR: /var/www/gmail-docs/attachments/text-dump
+    volumes:
+      - gd-attachments:/var/www/gmail-docs/attachments
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8010/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ── Stack B · OpenRouter + Gemini Flash Lite ───────────────────────────────
+  stack-b:
+    build:
+      context: ./stack-b
+      dockerfile: Dockerfile
+    container_name: gdv-stack-b
+    restart: unless-stopped
+    ports:
+      - "${STACK_B_PORT:-8011}:8011"
+    env_file:
+      - ./stack-b/.env
+    volumes:
+      # Stack B manda los PDF y las imágenes al LLM en binario, pero escribe
+      # los `.txt` de los XLSX/DOCX/CSV en la misma carpeta de trabajo.
+      - gd-attachments:/var/www/gmail-docs/attachments
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8011/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# El volumen de adjuntos se monta en la MISMA ruta absoluta en los tres
+# servicios, y no por casualidad: Laravel guarda en `attachments.local_path` la
+# ruta donde escribió cada archivo y se la manda tal cual al worker
+# (`AnalyzerClient`). Si el worker lo viera en otro sitio, `open(path)` falla.
+# Por eso `ATTACHMENTS_ROOT` admite rutas absolutas (ver `StoragePath`) en vez
+# de anteponer siempre `storage/app`.
+volumes:
+  gd-attachments:
