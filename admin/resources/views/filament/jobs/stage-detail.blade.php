@@ -302,7 +302,13 @@
                         </div>
                     </div>
                     @if ($attachment->fileExists())
-                        <a href="{{ route('attachments.download', ['uuid' => $attachment->uuid]) }}" class="gdv-btn-download">
+                        <a
+                            href="{{ route('attachments.download', ['uuid' => $attachment->uuid]) }}"
+                            class="gdv-btn-download"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download="{{ $attachment->filename }}"
+                        >
                             Descargar Archivo
                         </a>
                     @endif

@@ -26,6 +26,9 @@
             <a
                 href="{{ route('jobs.attachments.download-all', ['uuid' => $email->uuid]) }}"
                 class="gdv-btn-download-all"
+                target="_blank"
+                rel="noopener noreferrer"
+                download
                 title="Descargar todos los archivos adjuntos en un solo archivo ZIP"
             >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 16px; height: 16px;">
@@ -109,6 +112,9 @@
                                 <a
                                     href="{{ route('attachments.download', ['uuid' => $att->uuid]) }}"
                                     class="gdv-att-btn gdv-att-btn--dl"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download="{{ $att->filename }}"
                                     title="Descargar archivo"
                                 >
                                     Descargar
@@ -184,6 +190,9 @@
                                     <a
                                         href="{{ route('attachments.download', ['uuid' => $att->uuid]) }}"
                                         class="gdv-btn-download"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download="{{ $att->filename }}"
                                     >
                                         Descargar Archivo
                                     </a>

@@ -101,8 +101,8 @@
                 // usuario espera un evento que no va a llegar y no sabe si el
                 // job se trabó o si solo falta el stream.
                 var watchdog = setTimeout(function () {
-                    elTimeoutWarning.hidden = false;
-                    elReload.hidden = false;
+                    if (elTimeoutWarning) elTimeoutWarning.hidden = false;
+                    if (elReload) elReload.hidden = false;
                 }, 10000);
 
                 function el(tag, className, content) {
@@ -113,14 +113,17 @@
                 }
 
                 function setConn(state, label) {
-                    elConn.textContent = label;
-                    elDot.className = 'gdv-live__dot gdv-live__dot--' +
-                        (state === 'live'        ? 'live' :
-                         state === 'reconnecting' ? 'reconnecting' :
-                         state === 'error'        ? 'error' : 'idle');
+                    if (elConn) elConn.textContent = label;
+                    if (elDot) {
+                        elDot.className = 'gdv-live__dot gdv-live__dot--' +
+                            (state === 'live'        ? 'live' :
+                             state === 'reconnecting' ? 'reconnecting' :
+                             state === 'error'        ? 'error' : 'idle');
+                    }
                 }
 
                 function setStage(label) {
+                    if (!elStage || !elStageLabel) return;
                     if (!label) {
                         elStage.hidden = true;
                         return;
@@ -203,7 +206,7 @@
 
                     source.addEventListener('open', function () {
                         clearTimeout(watchdog);
-                        elTimeoutWarning.hidden = true;
+                        if (elTimeoutWarning) elTimeoutWarning.hidden = true;
                         setConn('live', 'En vivo');
                     });
 
@@ -237,12 +240,6 @@
                         if (source) { source.close(); source = null; }
 
                         // Recargar SOLO si se estaba siguiendo el job en vivo.
-                        //
-                        // Abriendo un job ya terminado, el `fin` llega en el
-                        // primer loop del stream — y ahí recargar es un bucle
-                        // infinito: la página recargada vuelve a abrir el
-                        // stream, reproduce las etapas, emite `fin` otra vez y
-                        // recarga. Cada vuelta a los ~600 ms, para siempre.
                         if (!liveAtOpen) {
                             setConn('done', 'Job finalizado · mostrando etapas guardadas');
                             return;
@@ -250,17 +247,11 @@
 
                         // El detalle completo (adjuntos, resultados, respuesta)
                         // lo arma el server en el render; acá solo hay etapas.
-                        // Recargar es lo que lo trae, y es el momento correcto:
-                        // el job ya no va a cambiar más.
                         setConn('done', 'Job finalizado · recargando detalle…');
                         setTimeout(function () { window.location.reload(); }, 600);
                     });
 
                     source.addEventListener('timeout', function () {
-                        // Corte por `stream.max_seconds`, NO fin del job. Se
-                        // cierra para que el `EventSource` reconecte limpio y
-                        // el replay siga desde `last_event_id`. Recargar la
-                        // página acá estaría mal: el job puede seguir corriendo.
                         if (source) { source.close(); source = null; }
                         setConn('reconnecting', 'Pausa programada · reconectando…');
                         setTimeout(connect, 1000);
@@ -272,29 +263,24 @@
                     });
 
                     source.onerror = function () {
-                        // `EventSource` reintenta solo salvo que se haya cerrado
-                        // con `source.close()`, que es el caso de `fin`. Si el
-                        // readyState es CLOSED ya no va a reintentar.
                         if (!source || source.readyState === EventSource.CLOSED) {
                             setConn('error', 'Se perdió la conexión. Abriendo el detalle…');
-                            elReload.hidden = false;
+                            if (elReload) elReload.hidden = false;
                         } else {
                             setConn('reconnecting', 'Reconectando…');
                         }
                     };
                 }
 
-                // Se abre el stream SIEMPRE, no solo para jobs vivos. Es lo que hace que
-                // abrir un job ya terminado muestre el replay de sus etapas,
-                // como en n8n al abrir un workflow viejo. Que se recargue o no
-                // la página después lo decide `liveAtOpen` en el handler de
-                // `fin`.
+                // Se abre el stream SIEMPRE, no solo para jobs vivos.
                 setConn('reconnecting', 'Conectando…');
                 connect();
 
-                elReload.addEventListener('click', function () {
-                    window.location.reload();
-                });
+                if (elReload) {
+                    elReload.addEventListener('click', function () {
+                        window.location.reload();
+                    });
+                }
 
                 // Al salir de la pestaña el stream sigue abierto y retiene un
                 // worker de php-fpm. `EventSource` no tiene evento de "cerrar"

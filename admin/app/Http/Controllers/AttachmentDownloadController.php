@@ -43,22 +43,11 @@ class AttachmentDownloadController extends Controller
         }
 
         // El nombre original es solo texto de la cabecera: si trae comillas o
-        // saltos de línea se rompe el header. `streamDownload()` no lo sanea, y
-        // un nombre con `\n` permite inyectar cabeceras.
-        $name = str_replace(["\r", "\n", '"'], '', $attachment->filename);
+        // saltos de línea se rompe el header.
+        $name = str_replace(["\r", "\n", '"', '/', '\\'], '', $attachment->filename);
 
-        return response()->streamDownload(function () use ($real): void {
-            $handle = fopen($real, 'rb');
-
-            if ($handle === false) {
-                return;
-            }
-
-            fpassthru($handle);
-            fclose($handle);
-        }, $name === '' ? 'adjunto' : $name, [
-            'Content-Type'        => $attachment->detected_kind ?: 'application/octet-stream',
-            'Content-Disposition' => 'attachment; filename="'.($name === '' ? 'adjunto' : $name).'"',
+        return response()->download($real, $name === '' ? 'adjunto' : $name, [
+            'Content-Type' => $attachment->detected_kind ?: 'application/octet-stream',
         ]);
     }
 }

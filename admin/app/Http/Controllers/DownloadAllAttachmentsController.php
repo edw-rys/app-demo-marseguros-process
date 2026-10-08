@@ -47,42 +47,34 @@ class DownloadAllAttachmentsController extends Controller
         }
 
         $zipFilename = 'adjuntos-job-' . Str::slug($email->subject ?: $email->uuid) . '.zip';
+        $tempZip = tempnam(sys_get_temp_dir(), 'gdv_zip_');
+        $zip = new ZipArchive();
 
-        return response()->streamDownload(function () use ($availableFiles): void {
-            $tempZip = tempnam(sys_get_temp_dir(), 'gdv_zip_');
-            $zip = new ZipArchive();
+        if ($zip->open($tempZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+            $usedNames = [];
 
-            if ($zip->open($tempZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
-                $usedNames = [];
+            foreach ($availableFiles as $f) {
+                $entryName = $f['filename'] ?: 'archivo';
 
-                foreach ($availableFiles as $f) {
-                    $entryName = $f['filename'] ?: 'archivo';
-
-                    // Evitar nombres duplicados en el zip
-                    if (isset($usedNames[$entryName])) {
-                        $usedNames[$entryName]++;
-                        $pi = pathinfo($entryName);
-                        $entryName = ($pi['filename'] ?? 'archivo') . '_' . $usedNames[$entryName] . (isset($pi['extension']) ? '.' . $pi['extension'] : '');
-                    } else {
-                        $usedNames[$entryName] = 1;
-                    }
-
-                    $zip->addFile($f['path'], $entryName);
+                // Evitar nombres duplicados en el zip
+                if (isset($usedNames[$entryName])) {
+                    $usedNames[$entryName]++;
+                    $pi = pathinfo($entryName);
+                    $entryName = ($pi['filename'] ?? 'archivo') . '_' . $usedNames[$entryName] . (isset($pi['extension']) ? '.' . $pi['extension'] : '');
+                } else {
+                    $usedNames[$entryName] = 1;
                 }
 
-                $zip->close();
-
-                $handle = fopen($tempZip, 'rb');
-                if ($handle !== false) {
-                    fpassthru($handle);
-                    fclose($handle);
-                }
-
-                @unlink($tempZip);
+                $zip->addFile($f['path'], $entryName);
             }
-        }, $zipFilename, [
-            'Content-Type'        => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="' . $zipFilename . '"',
-        ]);
+
+            $zip->close();
+
+            return response()->download($tempZip, $zipFilename, [
+                'Content-Type' => 'application/zip',
+            ])->deleteFileAfterSend(true);
+        }
+
+        return response()->redirectToRoute('filament.admin.resources.jobs.view', ['record' => $email]);
     }
 }
