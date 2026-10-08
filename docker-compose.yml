@@ -148,6 +148,3 @@ services:
 # de anteponer siempre `storage/app`.
 volumes:
   gd-attachments:
-  # Credenciales de Google y token de OAuth. Sobrevive a los rebuilds, que es
-  # justo lo que no hace el código dentro de la imagen.
-  gd-private:

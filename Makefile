@@ -53,7 +53,7 @@ help:
 
 ## ── Producción ───────────────────────────────────────────────────────────────
 # Solo `docker-compose.yml`. El código va en la imagen y las credenciales de
-# Google en el volumen `gd-private`.
+# Google entran por el bind-mount de `./admin/storage/private`.
 prod:
 	$(BUILD_ENV) $(COMPOSE_PROD) up -d
 

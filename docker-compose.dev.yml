@@ -22,7 +22,11 @@ services:
       # host. Si no lo tenés, el arranque falla con un mensaje que lo dice.
       - ./admin:/var/www/html
 
-      # El volumen `gd-private` del compose base se reemplaza por el
-      # directorio real del host: así se conserva el refresh token ya
-      # autorizado en vez de empezar de cero con un volumen vacío.
-      - ./admin/storage/private:/var/www/html/storage/private
+      # `storage/private/` NO se monta acá: el compose base ya lo hace con un
+      # bind-mount a `./admin/storage/private`, que es exactamente la misma
+      # ruta. Declararlo en los dos archivos lo haría editable en un lugar y
+      # no en el otro, que es la forma más común de romperse solo.
+      #
+      # Nota: el refresh token de `gmail-token.json` caduca a los ~7 días
+      # mientras la app de Google esté en modo Testing. Si lo perdés, hay que
+      # volver a autorizar:  php artisan gmail:auth

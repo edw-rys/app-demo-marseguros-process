@@ -81,8 +81,31 @@ if [ ! -e "$APP_ROOT/public/storage" ]; then
     ln -sfn "$APP_ROOT/storage/app/public" "$APP_ROOT/public/storage"
 fi
 
-chown -R www-data:www-data "$APP_ROOT/storage" "$DATA_ROOT" "$APP_ROOT/bootstrap/cache" 2>/dev/null || true
-chmod -R 775 "$APP_ROOT/storage" "$DATA_ROOT" "$APP_ROOT/bootstrap/cache" 2>/dev/null || true
+# `storage/private/` se excluye del `chmod`/`chown` recursivo. Con un bind-mount
+# (que es lo que hace el compose), un `-R` sobre `$APP_ROOT/storage` NO se
+# queda en el contenedor: relaja los permisos EN EL HOST de `oauth-client.json`
+# y `gmail-token.json`, que contienen un `client_secret` y un `refresh_token`.
+# Con un volumen nombrado eso no pasaba, y el error aparece de golpe en el
+# primer despliegue con bind-mount.
+chown -R www-data:www-data "$DATA_ROOT" "$APP_ROOT/bootstrap/cache" 2>/dev/null || true
+chmod -R 775 "$DATA_ROOT" "$APP_ROOT/bootstrap/cache" 2>/dev/null || true
+
+# El resto de `storage/` sí necesita los permisos abiertos: Laravel escribe ahí
+# (vistas compiladas, sesiones, logs) y `www-data` es el dueño en la imagen.
+find "$APP_ROOT/storage" -mindepth 1 -maxdepth 1 \
+    ! -name private -exec chown -R www-data:www-data {} + 2>/dev/null || true
+find "$APP_ROOT/storage" -mindepth 1 -maxdepth 1 \
+    ! -name private -exec chmod -R 775 {} + 2>/dev/null || true
+
+# El directorio en sí sí hay que dejarlo utilizable: es el punto de escritura
+# del token. Solo la WARNING, sin abortar — con `set -e` un fallo de `chmod`
+# tiraría el arranque, y es preferible un admin que avisa a uno en crash-loop.
+chmod 775 "$APP_ROOT/storage/private" 2>/dev/null || true
+if ! [ -w "$APP_ROOT/storage/private" ]; then
+    echo "[INIT] AVISO: $APP_ROOT/storage/private no es escribible por www-data."
+    echo "[INIT]        No se va a poder guardar el refresh token de OAuth."
+    echo "[INIT]        En el host:  chmod 775 admin/storage/private"
+fi
 
 # ── Base de datos ────────────────────────────────────────────────────────────
 # SQLite necesita que el archivo exista ANTES de abrirlo: `touch` evita que
