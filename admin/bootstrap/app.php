@@ -39,12 +39,39 @@ return Application::configure(basePath: dirname(__DIR__))
         // `docker-compose.yml` o en el entorno del contenedor.
         $middleware->trustProxies(
             at: $_SERVER['TRUSTED_PROXIES'] ?? $_ENV['TRUSTED_PROXIES'] ?? '*',
+            // `HEADER_X_FORWARDED_PORT` está DELIBERADAMENTE ausente, y no es
+            // un olvido.
+            //
+            // Cloudflare manda `X-Forwarded-Port: 80` porque la conexión con
+            // el origen es HTTP. Al declararlo confiable, Symfony sobrescribe
+            // el puerto y arma URLs como:
+            //
+            //     https://demos-marseguros.edw-dev.com:80/css/filament/...app.css
+            //
+            // eso es HTTPS sobre el puerto 80: el handshake TLS no se puede
+            // hacer, el asset no carga nunca, y como `app.js` importa
+            // `livewire.js` antes de ejecutarse, TODOS los scripts del panel
+            // quedan colgados detrás. El HTML llega igual, porque lo sirve la
+            // misma capa — por eso el síntoma es "la página carga pero no
+            // funciona".
+            //
+            // Medido contra `Request::setTrustedProxies()`:
+            //
+            //     con    X-Forwarded-Port confiable → https://host:80
+            //     sin    X-Forwarded-Port confiable → https://host
+            //
+            // El esquema sale de `X-Forwarded-Proto` (que sí va) y el puerto
+            // correctamente se omite.
+            //
+            // OJO con `HEADER_X_FORWARDED_AWS_ELB`: parece inocua pero vale
+            // `0b0011010`, y ese número YA incluye el bit del puerto
+            // (FOR=2 + PROTO=8 + PORT=16). Con solo esa constante el `:80`
+            // volvía a aparecer, y el bitmask escrito a mano es la única
+            // forma de dejarlo afuera.
             headers: Request::HEADER_X_FORWARDED_FOR
                 | Request::HEADER_X_FORWARDED_HOST
-                | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO
-                | Request::HEADER_X_FORWARDED_PREFIX
-                | Request::HEADER_X_FORWARDED_AWS_ELB,
+                | Request::HEADER_X_FORWARDED_PREFIX,
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
