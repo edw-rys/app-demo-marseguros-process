@@ -21,6 +21,9 @@
 /public/hot
 /public/js/filament
 /public/storage
+# Se publica en el build con `php artisan livewire:publish --assets` (ver el
+# Dockerfile). Son ~15 MB de artefactos de Livewire que no van al repo.
+/public/vendor
 /storage/*.key
 /storage/pail
 /vendor

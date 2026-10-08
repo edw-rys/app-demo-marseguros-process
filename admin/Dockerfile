@@ -105,6 +105,32 @@ COPY --chown=www-data:www-data . .
 RUN composer run-script post-autoload-cmd \
     || composer dump-autoload --no-dev --optimize
 
+# ── Assets de Livewire y Filament como ARCHIVOS, no como rutas ───────────────
+# Por defecto `livewire.js` (609 KB) se sirve por una RUTA de Laravel, o sea
+# atraviesa php-fpm entero. Y los chunks de Filament también, si no están
+# publicados.
+#
+# El problema no es que fallen: es que tardan. `app.js` hace `import()` de
+# `livewire.js` antes de ejecutarse, así que TODOS los demás chunks quedan
+# esperando detrás. Con php-fpm ocupado —y lo está: cada conexión SSE de
+# `/jobs/{uuid}/stream` retiene un worker durante toda su vida, y
+# `fastcgi_read_timeout` es de 1 hora— ese archivo se arrastra y la página se
+# queda en blanco con la consola diciendo "Importing a module script failed".
+#
+# `livewire:publish --assets` deja los archivos en `public/vendor/livewire/` y
+# Livewire los detecta solo (`usePublishedAssetsIfAvailable`), así que a
+# partir de ahí los sirve nginx directo del disco. Fuera de php-fpm.
+#
+# `livewire:publish --assets` deja los archivos en `public/vendor/livewire/` y
+# Livewire los detecta solo (`usePublishedAssetsIfAvailable`), así que a partir
+# de ahí los sirve nginx directo del disco. Fuera de php-fpm.
+RUN php artisan livewire:publish --assets --no-interaction \
+    && php artisan filament:assets \
+    && test -f public/vendor/livewire/livewire.js \
+    || (echo "ERROR: no se publicaron los assets de Livewire." \
+        && ls -la public/vendor/livewire/ 2>&1 \
+        && exit 1)
+
 # Última puerta antes de dar la imagen por buena.
 #
 # Sin esto, una imagen sin `vendor` llega a `init.sh`, que revienta con un
